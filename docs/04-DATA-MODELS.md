@@ -642,7 +642,12 @@ export default {
 
 **Process**:
 1. First 7 conversations establish personal baseline
-2. Compute average of each metric
+2. Compute mean and standard deviation for each tracked metric:
+   - Vocabulary Diversity (TTR)
+   - Topic Coherence
+   - Repetition Rate
+   - Word-Finding Pauses
+   - Response Latency (optional, requires timing data)
 3. Store in `patient.cognitiveBaseline`
 4. Alert if any metric deviates >20% from baseline for 3+ consecutive calls
 

@@ -125,7 +125,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m spacy download en_core_web_md
+python -m spacy download en_core_web_sm
 
 # Copy and fill in API keys
 cp .env.example .env
@@ -353,8 +353,10 @@ Built for the 54 million Americans caring for aging parents, and for our own par
 
 ## 📈 Project Status
 
-- **Phase**: ✅ Phase 0 Complete (Setup)
-- **Current Phase**: Phase 1 (Voice Agent Core)
+- **Phase 0**: ✅ Complete (Setup & Documentation)
+- **Phase 1**: ✅ Complete (Voice Agent Core — Deepgram + Twilio)
+- **Phase 2**: ✅ Complete (Cognitive Analysis, Alerts, Notifications, API Routes)
+- **Current Phase**: Phase 3 (Sanity CMS Integration, Nostalgia Mode)
 - **Deployment**: 🚧 In Progress
 - **Demo Video**: 🚧 In Progress
 - **Submissions**: ⏳ Pending

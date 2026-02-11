@@ -27,59 +27,66 @@ claracare/
 │
 ├── backend/                           # Python FastAPI (P1, P2, P3)
 │   ├── README.md
+│   ├── P2-README.md                   # P2 implementation guide
 │   ├── requirements.txt               # Python dependencies
+│   ├── pytest.ini                     # Test configuration
 │   ├── Dockerfile                     # Backend container
 │   ├── .env.example                   # Example environment variables
-│   ├── pyproject.toml                 # Python project config (optional)
 │   │
-│   └── app/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                    # FastAPI app entry point + lifespan init
+│   │   │
+│   │   ├── voice/                     # P1 — Voice AI
+│   │   │   ├── __init__.py
+│   │   │   ├── agent.py               # Deepgram Voice Agent WebSocket handler
+│   │   │   ├── functions.py           # Function calling + cognitive pipeline integration
+│   │   │   ├── persona.py             # Clara's system prompt + function definitions
+│   │   │   ├── twilio_bridge.py       # Twilio Media Stream WebSocket bridge
+│   │   │   └── outbound.py            # Outbound call management
+│   │   │
+│   │   ├── cognitive/                 # P2 — NLP & Cognitive Analysis
+│   │   │   ├── __init__.py
+│   │   │   ├── models.py              # Pydantic models for metrics, baselines, alerts
+│   │   │   ├── analyzer.py            # spaCy NLP metrics (TTR, coherence, etc.)
+│   │   │   ├── baseline.py            # Baseline establishment + deviation detection
+│   │   │   ├── alerts.py              # Alert generation + notification dispatch
+│   │   │   ├── pipeline.py            # Pipeline orchestrator (analyze → baseline → alert → digest)
+│   │   │   └── utils.py               # Shared utilities (cognitive score calculation)
+│   │   │
+│   │   ├── storage/                   # P2 — Data Abstraction Layer
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py                # DataStore Protocol (interface)
+│   │   │   └── memory.py              # In-memory implementation with seeded data
+│   │   │
+│   │   ├── notifications/             # P2 — Email Notifications
+│   │   │   ├── __init__.py
+│   │   │   ├── email.py               # Async SMTP email service
+│   │   │   └── templates/
+│   │   │       ├── _base.html          # Shared base template
+│   │   │       ├── alert_email.html    # Alert notification template
+│   │   │       └── daily_digest.html   # Daily digest template
+│   │   │
+│   │   ├── routes/                    # P2 — REST API Endpoints
+│   │   │   ├── __init__.py
+│   │   │   ├── patients.py            # Patient profile CRUD
+│   │   │   ├── conversations.py       # Conversation history + pipeline trigger
+│   │   │   ├── wellness.py            # Wellness digests + cognitive trends
+│   │   │   └── alerts.py              # Alert management + acknowledgment
+│   │   │
+│   │   ├── nostalgia/                 # P3 — Nostalgia Mode (planned)
+│   │   │   └── ...
+│   │   │
+│   │   └── sanity_client/             # P3 — Sanity CMS (planned)
+│   │       └── ...
+│   │
+│   └── tests/                         # Test Suite
 │       ├── __init__.py
-│       ├── main.py                    # FastAPI app entry point
-│       ├── config.py                  # Configuration (ENV vars)
-│       │
-│       ├── voice/                     # P1 — Voice AI
-│       │   ├── __init__.py
-│       │   ├── agent.py               # Deepgram Voice Agent WebSocket handler
-│       │   ├── functions.py           # Function calling definitions
-│       │   ├── persona.py             # Clara's system prompt
-│       │   └── twilio_bridge.py       # Twilio WebSocket bridge (bonus)
-│       │
-│       ├── cognitive/                 # P2 — NLP & Cognitive Analysis
-│       │   ├── __init__.py
-│       │   ├── analyzer.py            # spaCy NLP metrics
-│       │   ├── baseline.py            # Baseline establishment
-│       │   └── alerts.py              # Threshold detection + notifications
-│       │
-│       ├── nostalgia/                 # P3 — Nostalgia Mode
-│       │   ├── __init__.py
-│       │   ├── era.py                 # Era calculation + content strategy
-│       │   └── youcom_client.py       # You.com API wrapper
-│       │
-│       ├── sanity_client/             # P3 — Sanity CMS
-│       │   ├── __init__.py
-│       │   ├── client.py              # Sanity Python client
-│       │   └── queries.py             # GROQ queries
-│       │
-│       ├── notifications/             # P2 — Alerts
-│       │   ├── __init__.py
-│       │   ├── email.py               # Email alerts (SMTP)
-│       │   └── sms.py                 # Twilio SMS (bonus)
-│       │
-│       ├── routes/                    # P2, P3 — API Endpoints
-│           ├── __init__.py
-│           ├── patients.py            # CRUD for patient data
-│           ├── conversations.py       # Conversation history
-│           ├── wellness.py            # Wellness digests + trends
-│           ├── reports.py             # Cognitive Health Report PDF download
-│           ├── auth.py                # Simple authentication
-│           └── websocket.py           # WebSocket endpoint for voice
-│
-│       └── reports/                   # P3 — Foxit PDF Reports
-│           ├── __init__.py
-│           ├── generator.py           # Report data assembly + Foxit API calls
-│           ├── foxit_client.py        # Foxit Document Gen + PDF Services wrapper
-│           └── templates/
-│               └── cognitive_report.docx  # DOCX template for Foxit Doc Gen
+│       ├── test_cognitive_analyzer.py  # 24 unit tests for analyzer
+│       ├── test_baseline_tracker.py    # 12 tests for baseline logic
+│       ├── test_alert_engine.py        # 10 tests for alert generation
+│       ├── test_pipeline.py            # 10 tests for pipeline orchestration
+│       └── test_api_routes.py          # 20+ integration tests for API
 │
 ├── dashboard/                         # Next.js (P4)
 │   ├── README.md
@@ -189,21 +196,22 @@ claracare/
 
 ### `backend/requirements.txt`
 ```txt
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-websockets==12.0
-httpx==0.26.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
-spacy==3.7.2
-nltk==3.8.1
-numpy==1.26.3
-scikit-learn==1.4.0
-sentence-transformers==2.3.1
-requests==2.31.0
-twilio==8.11.0
-python-multipart==0.0.6
+# See backend/requirements.txt for current pinned versions
+fastapi
+uvicorn[standard]
+websockets
+httpx
+pydantic
+python-dotenv
+python-multipart
+spacy
+sentence-transformers
+numpy
+scikit-learn
+aiosmtplib
+jinja2
+pytest
+pytest-asyncio
 ```
 
 ### `backend/.env.example`
@@ -337,10 +345,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download spaCy model
-RUN python -m spacy download en_core_web_md
-
-# Download NLTK data
-RUN python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
+RUN python -m spacy download en_core_web_sm
 
 # Copy application code
 COPY . .
@@ -463,9 +468,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Download models
-python -m spacy download en_core_web_md
-python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
+# Download spaCy model
+python -m spacy download en_core_web_sm
 
 # Copy .env.example to .env and fill in API keys
 cp .env.example .env
@@ -572,22 +576,24 @@ docs(readme): Add deployment instructions
 
 ---
 
-## Testing Structure (If Time Permits)
+## Testing Structure
 
 ```
 backend/tests/
 ├── __init__.py
-├── test_voice_agent.py
-├── test_cognitive_analyzer.py
-├── test_nostalgia_mode.py
-└── test_api_routes.py
+├── test_cognitive_analyzer.py     # 24 unit tests
+├── test_baseline_tracker.py       # 12 tests
+├── test_alert_engine.py           # 10 tests
+├── test_pipeline.py               # 10 integration tests
+├── test_api_routes.py             # 20+ integration tests
+└── verify_p2_setup.py             # Manual verification script
 
 dashboard/tests/
 └── (Jest tests for components)
 
 # Run backend tests
 cd backend
-pytest
+pytest -v
 
 # Run frontend tests
 cd dashboard
