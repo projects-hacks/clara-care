@@ -6,7 +6,7 @@ Sends alert emails and daily wellness digests using async SMTP + Jinja2 template
 import logging
 import os
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, UTC
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 

@@ -3,7 +3,7 @@ Pydantic Models for Cognitive Analysis
 All data structures for cognitive metrics, baselines, alerts, and digests
 """
 
-from datetime import datetime, date
+from datetime import datetime, date, UTC
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 

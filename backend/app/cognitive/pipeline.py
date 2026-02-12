@@ -5,7 +5,7 @@ Chains all cognitive processing steps: analyze -> baseline -> alert -> digest
 
 import logging
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, UTC
 from typing import Optional
 
 from .utils import calculate_cognitive_score
@@ -99,7 +99,7 @@ class CognitivePipeline:
         conversation = {
             "id": conversation_id,
             "patient_id": patient_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "duration": duration,
             "summary": summary,
             "detected_mood": detected_mood,
@@ -213,7 +213,7 @@ class CognitivePipeline:
             "cognitive_trend": cognitive_trend,
             "recommendations": recommendations,
             "conversation_id": conversation_id,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(UTC).isoformat()
         }
         
         # Save digest

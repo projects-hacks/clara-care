@@ -20,7 +20,7 @@ load_dotenv(dotenv_path=env_path)
 from .voice import twilio_bridge, session_manager, outbound_manager
 
 # Import P2 components
-from .storage import InMemoryDataStore
+from .storage import InMemoryDataStore, SanityDataStore
 from .cognitive.analyzer import CognitiveAnalyzer
 from .cognitive.baseline import BaselineTracker
 from .cognitive.alerts import AlertEngine
@@ -33,6 +33,17 @@ from .routes import (
     alerts_router
 )
 from .routes import patients, conversations, wellness, alerts
+
+# P3 imports
+try:
+    from .routes.insights import router as insights_router
+    from .routes.reports import router as reports_router
+    HAS_P3_ROUTES = True
+except ImportError as e:
+    HAS_P3_ROUTES = False
+    # logger not available yet at module level
+    import sys
+    print(f"Warning: P3 routes not available: {e}", file=sys.stderr)
 
 # Configure logging
 logging.basicConfig(
@@ -54,8 +65,22 @@ async def lifespan(app: FastAPI):
     # Initialize P2 components
     logger.info("Initializing cognitive analysis system...")
     
-    # Data store (in-memory for now, P3 will add Sanity)
-    data_store = InMemoryDataStore()
+    # P3: Decide between Sanity and in-memory storage
+    sanity_project_id = os.getenv("SANITY_PROJECT_ID")
+    sanity_dataset = os.getenv("SANITY_DATASET")
+    sanity_token = os.getenv("SANITY_TOKEN")
+    
+    if sanity_project_id and sanity_dataset and sanity_token:
+        logger.info("✓ Sanity credentials found - using SanityDataStore")
+        data_store = SanityDataStore(
+            project_id=sanity_project_id,
+            dataset=sanity_dataset,
+            token=sanity_token
+        )
+    else:
+        logger.info("⚠ Sanity credentials not found - using InMemoryDataStore (testing mode)")
+        logger.info("  To use Sanity, set SANITY_PROJECT_ID, SANITY_DATASET, and SANITY_TOKEN")
+        data_store = InMemoryDataStore()
     
     # Cognitive components
     analyzer = CognitiveAnalyzer()
@@ -89,6 +114,22 @@ async def lifespan(app: FastAPI):
     # Set cognitive pipeline in route modules
     conversations.set_cognitive_pipeline(cognitive_pipeline)
     
+    # P3: Set data store in insights and reports routes if available
+    if HAS_P3_ROUTES:
+        from .routes import insights, reports
+        from .reports.generator import ReportGenerator
+        from .reports.foxit_client import FoxitClient
+        
+        # Initialize insights with data store
+        insights.set_data_store(data_store)
+        
+        # Initialize reports with report generator
+        foxit_client = FoxitClient()
+        report_gen = ReportGenerator(data_store, foxit_client)
+        reports.set_report_generator(report_gen)
+        
+        logger.info("✓ P3 routes initialized")
+    
     # Set cognitive pipeline in Twilio bridge (P2 integration)
     twilio_bridge.set_cognitive_pipeline(cognitive_pipeline)
     
@@ -98,7 +139,10 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down ClaraCare backend...")
-    await session_manager.close_all_sessions()
+    
+    # P3: Cleanup Sanity client if using SanityDataStore
+    if isinstance(data_store, SanityDataStore):
+        await data_store.close()
 
 
 # Create FastAPI app
@@ -123,6 +167,12 @@ app.include_router(patients_router)
 app.include_router(conversations_router)
 app.include_router(wellness_router)
 app.include_router(alerts_router)
+
+# Register P3 API routers if available
+if HAS_P3_ROUTES:
+    app.include_router(insights_router)
+    app.include_router(reports_router)
+    logger.info("✓ P3 routes registered")
 
 
 @app.get("/")

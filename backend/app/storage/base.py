@@ -186,3 +186,18 @@ class DataStore(Protocol):
             List of dicts with date and metrics, ordered by date asc
         """
         ...
+
+    async def get_patient_insights(self, patient_id: str) -> dict:
+        """
+        Get structured content insights for a patient.
+        Leverages cross-document references and typed field aggregation.
+        
+        Showcase for Sanity challenge: features impossible with flat files.
+        
+        Returns:
+            Dict with:
+            - cognitive_by_mood: {mood: {avg_vocabulary, avg_coherence, conversation_count}}
+            - nostalgia_effectiveness: {with_nostalgia, without_nostalgia, improvement_pct}
+            - alert_summary: {total, by_severity, most_common_type, acknowledged_count}
+        """
+        ...

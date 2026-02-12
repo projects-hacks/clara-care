@@ -4,7 +4,7 @@ Establishes cognitive baselines and detects deviations
 """
 
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, UTC
 from typing import Optional
 import statistics
 
@@ -72,7 +72,7 @@ class BaselineTracker:
             "established": True,
             "baseline_date": date.today().isoformat(),
             "conversation_count": len(metrics_list),
-            "last_updated": datetime.utcnow().isoformat()
+            "last_updated": datetime.now(UTC).isoformat()
         }
         
         # Vocabulary diversity
@@ -128,7 +128,7 @@ class BaselineTracker:
             "avg_response_time": None,
             "response_time_std": None,
             "conversation_count": 0,
-            "last_updated": datetime.utcnow().isoformat()
+            "last_updated": datetime.now(UTC).isoformat()
         }
     
     async def compare_to_baseline(
@@ -260,7 +260,7 @@ class BaselineTracker:
             "established": True,
             "baseline_date": date.today().isoformat(),
             "conversation_count": len(metrics_list),
-            "last_updated": datetime.utcnow().isoformat()
+            "last_updated": datetime.now(UTC).isoformat()
         }
         
         # Recalculate all metrics

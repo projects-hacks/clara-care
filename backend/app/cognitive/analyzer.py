@@ -10,7 +10,7 @@ NLP-based cognitive health analysis with 5 key metrics:
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 from collections import Counter
 
@@ -116,7 +116,7 @@ class CognitiveAnalyzer:
             "repetition_rate": repetition_rate,
             "word_finding_pauses": word_finding_pauses,
             "response_latency": response_latency,
-            "analyzed_at": datetime.utcnow().isoformat(),
+            "analyzed_at": datetime.now(UTC).isoformat(),
             "conversation_id": conversation_id,
             "patient_id": patient_id
         }
@@ -137,7 +137,7 @@ class CognitiveAnalyzer:
             "repetition_rate": 0.0,
             "word_finding_pauses": 0,
             "response_latency": None,
-            "analyzed_at": datetime.utcnow().isoformat(),
+            "analyzed_at": datetime.now(UTC).isoformat(),
             "conversation_id": conversation_id,
             "patient_id": patient_id,
             "_partial": True

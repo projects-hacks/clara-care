@@ -5,7 +5,7 @@ Generates and manages alerts based on cognitive deviations and real-time trigger
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class AlertEngine:
                 "deviation_percent": deviation["deviation_percent"],
                 "consecutive_count": deviation["consecutive_count"]
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "acknowledged": False
         }
         
@@ -175,7 +175,7 @@ class AlertEngine:
             "severity": severity,
             "description": message,
             "related_metrics": context,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "acknowledged": False
         }
         
@@ -238,7 +238,7 @@ class AlertEngine:
         """
         updates = {
             "acknowledged": True,
-            "acknowledged_at": datetime.utcnow().isoformat(),
+            "acknowledged_at": datetime.now(UTC).isoformat(),
             "acknowledged_by": acknowledged_by
         }
         

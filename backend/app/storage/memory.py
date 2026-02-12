@@ -6,7 +6,7 @@ Allows P2 to work without Sanity (P3 will add SanityDataStore)
 
 import uuid
 import statistics
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, UTC
 from typing import Optional
 from collections import defaultdict
 
@@ -88,7 +88,7 @@ class InMemoryDataStore:
         }
         
         # Seed 7 baseline conversations (over 2 weeks)
-        base_date = datetime.utcnow() - timedelta(days=14)
+        base_date = datetime.now(UTC) - timedelta(days=14)
         
         conversations_data = [
             {
@@ -102,6 +102,12 @@ class InMemoryDataStore:
                     "repetition_rate": 0.04,
                     "word_finding_pauses": 1,
                     "response_latency": 1.4
+                },
+                "nostalgia_engagement": {
+                    "triggered": True,
+                    "era": "1966-1976",
+                    "content_used": "Shared memories of 1960s gardening",
+                    "engagement_score": 8
                 }
             },
             {
@@ -115,7 +121,8 @@ class InMemoryDataStore:
                     "repetition_rate": 0.06,
                     "word_finding_pauses": 2,
                     "response_latency": 1.6
-                }
+                },
+                "nostalgia_engagement": None
             },
             {
                 "summary": "Dorothy excitedly talked about her grandson's upcoming graduation. Very engaged and happy.",
@@ -128,7 +135,8 @@ class InMemoryDataStore:
                     "repetition_rate": 0.02,
                     "word_finding_pauses": 0,
                     "response_latency": 1.2
-                }
+                },
+                "nostalgia_engagement": None
             },
             {
                 "summary": "Discussed upcoming lunch plans with neighbor. Dorothy seemed in good spirits.",
@@ -141,7 +149,8 @@ class InMemoryDataStore:
                     "repetition_rate": 0.05,
                     "word_finding_pauses": 1,
                     "response_latency": 1.5
-                }
+                },
+                "nostalgia_engagement": None
             },
             {
                 "summary": "Talked about 1960s music - The Beatles, The Beach Boys. Dorothy very nostalgic.",
@@ -154,6 +163,12 @@ class InMemoryDataStore:
                     "repetition_rate": 0.04,
                     "word_finding_pauses": 2,
                     "response_latency": 1.6
+                },
+                "nostalgia_engagement": {
+                    "triggered": True,
+                    "era": "1966-1976",
+                    "content_used": "The Beatles released 'I Want to Hold Your Hand' in 1963",
+                    "engagement_score": 9
                 }
             },
             {
@@ -167,7 +182,8 @@ class InMemoryDataStore:
                     "repetition_rate": 0.06,
                     "word_finding_pauses": 1,
                     "response_latency": 1.5
-                }
+                },
+                "nostalgia_engagement": None
             },
             {
                 "summary": "General check-in. Dorothy mentioned feeling a bit tired but overall good.",
@@ -180,7 +196,8 @@ class InMemoryDataStore:
                     "repetition_rate": 0.07,
                     "word_finding_pauses": 3,
                     "response_latency": 1.8
-                }
+                },
+                "nostalgia_engagement": None
             }
         ]
         
@@ -196,7 +213,8 @@ class InMemoryDataStore:
                 "summary": conv_data["summary"],
                 "detected_mood": conv_data["mood"],
                 "transcript": f"Clara: Hello Dorothy! How are you today?\nDorothy: {conv_data['summary'][:50]}...",
-                "cognitive_metrics": conv_data["metrics"]
+                "cognitive_metrics": conv_data["metrics"],
+                "nostalgia_engagement": conv_data.get("nostalgia_engagement")
             }
         
         # Establish baseline from first 7 conversations
@@ -217,7 +235,7 @@ class InMemoryDataStore:
             "avg_response_time": statistics.mean([m["response_latency"] for m in metrics_list]),
             "response_time_std": statistics.stdev([m["response_latency"] for m in metrics_list]),
             "conversation_count": 7,
-            "last_updated": datetime.utcnow().isoformat()
+            "last_updated": datetime.now(UTC).isoformat()
         }
         
         # Seed wellness digests for the last 7 days
@@ -254,9 +272,9 @@ class InMemoryDataStore:
                 "word_finding_pauses": 3,
                 "baseline_avg": 1.5
             },
-            "timestamp": (datetime.utcnow() - timedelta(days=3)).isoformat(),
+            "timestamp": (datetime.now(UTC) - timedelta(days=3)).isoformat(),
             "acknowledged": True,
-            "acknowledged_at": (datetime.utcnow() - timedelta(days=2)).isoformat(),
+            "acknowledged_at": (datetime.now(UTC) - timedelta(days=2)).isoformat(),
             "acknowledged_by": "family-sarah-001"
         }
         
@@ -270,7 +288,7 @@ class InMemoryDataStore:
                 "repetition_rate": 0.07,
                 "baseline": 0.05
             },
-            "timestamp": (datetime.utcnow() - timedelta(days=1)).isoformat(),
+            "timestamp": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
             "acknowledged": False
         }
     
@@ -390,7 +408,7 @@ class InMemoryDataStore:
         days: int = 30
     ) -> list[dict]:
         """Get time-series cognitive metrics"""
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         
         convs = [
             c for c in self.conversations.values()
@@ -413,3 +431,111 @@ class InMemoryDataStore:
                 })
         
         return trends
+
+    async def get_patient_insights(self, patient_id: str) -> dict:
+        """
+        Get structured content insights for a patient.
+        Showcase for Sanity challenge: features impossible with flat files.
+        """
+        # Get all conversations for the patient
+        all_convs = [
+            c for c in self.conversations.values()
+            if c["patient_id"] == patient_id
+        ]
+
+        # --- Cognitive by Mood ---
+        mood_stats: dict = {}
+        for conv in all_convs:
+            mood = conv.get("detected_mood", "unknown")
+            metrics = conv.get("cognitive_metrics")
+            if not metrics:
+                continue
+            if mood not in mood_stats:
+                mood_stats[mood] = {"vocabs": [], "coherences": [], "count": 0}
+            vocab = metrics.get("vocabulary_diversity")
+            coherence = metrics.get("topic_coherence")
+            if vocab is not None:
+                mood_stats[mood]["vocabs"].append(vocab)
+            if coherence is not None:
+                mood_stats[mood]["coherences"].append(coherence)
+            mood_stats[mood]["count"] += 1
+
+        cognitive_by_mood = {}
+        for mood, stats in mood_stats.items():
+            avg_v = sum(stats["vocabs"]) / len(stats["vocabs"]) if stats["vocabs"] else 0
+            avg_c = sum(stats["coherences"]) / len(stats["coherences"]) if stats["coherences"] else 0
+            cognitive_by_mood[mood] = {
+                "avg_vocabulary": round(avg_v, 3),
+                "avg_coherence": round(avg_c, 3),
+                "conversation_count": stats["count"]
+            }
+
+        # --- Nostalgia Effectiveness ---
+        with_nostalgia = []
+        without_nostalgia = []
+        for conv in all_convs:
+            metrics = conv.get("cognitive_metrics")
+            if not metrics:
+                continue
+            ne = conv.get("nostalgia_engagement")
+            if ne and ne.get("triggered"):
+                with_nostalgia.append(metrics)
+            else:
+                without_nostalgia.append(metrics)
+
+        def _avg(lst: list, key: str) -> float:
+            vals = [m[key] for m in lst if m.get(key) is not None]
+            return sum(vals) / len(vals) if vals else 0.0
+
+        wv = _avg(with_nostalgia, "vocabulary_diversity")
+        wov = _avg(without_nostalgia, "vocabulary_diversity")
+        wc = _avg(with_nostalgia, "topic_coherence")
+        woc = _avg(without_nostalgia, "topic_coherence")
+
+        vocab_imp = ((wv - wov) / wov * 100) if wov > 0 else 0
+        coh_imp = ((wc - woc) / woc * 100) if woc > 0 else 0
+
+        nostalgia_effectiveness = {
+            "with_nostalgia": {
+                "avg_vocabulary": round(wv, 3),
+                "avg_coherence": round(wc, 3),
+                "count": len(with_nostalgia)
+            },
+            "without_nostalgia": {
+                "avg_vocabulary": round(wov, 3),
+                "avg_coherence": round(woc, 3),
+                "count": len(without_nostalgia)
+            },
+            "improvement_pct": {
+                "vocabulary": round(vocab_imp, 1),
+                "coherence": round(coh_imp, 1)
+            }
+        }
+
+        # --- Alert Summary ---
+        patient_alerts = [
+            a for a in self.alerts.values()
+            if a["patient_id"] == patient_id
+        ]
+        severity_counts = {"low": 0, "medium": 0, "high": 0}
+        type_counts: dict = {}
+        for alert in patient_alerts:
+            sev = alert.get("severity", "low")
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+            at = alert.get("alert_type", "unknown")
+            type_counts[at] = type_counts.get(at, 0) + 1
+
+        most_common = max(type_counts.items(), key=lambda x: x[1])[0] if type_counts else "none"
+
+        alert_summary = {
+            "total": len(patient_alerts),
+            "by_severity": severity_counts,
+            "most_common_type": most_common,
+            "acknowledged_count": sum(1 for a in patient_alerts if a.get("acknowledged"))
+        }
+
+        return {
+            "cognitive_by_mood": cognitive_by_mood,
+            "nostalgia_effectiveness": nostalgia_effectiveness,
+            "alert_summary": alert_summary
+        }
