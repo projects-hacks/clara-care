@@ -12,7 +12,6 @@ import {
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import type { CognitiveTrend } from '@/lib/api'
-import { metricLabel } from '@/lib/utils'
 
 interface CognitiveChartProps {
   data: CognitiveTrend[]
@@ -50,7 +49,6 @@ export default function CognitiveChart({
 
   return (
     <div>
-      <p className="mb-2 text-xs font-medium text-gray-500">{metricLabel(metric)}</p>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={filtered} margin={{ top: 4, right: 8, bottom: 4, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
