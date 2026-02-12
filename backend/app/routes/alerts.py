@@ -3,7 +3,7 @@ Alerts API Routes
 Endpoints for viewing and managing alerts
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
@@ -88,7 +88,7 @@ async def acknowledge_alert(alert_id: str, body: dict):
     # Update alert
     updates = {
         "acknowledged": True,
-        "acknowledged_at": datetime.utcnow().isoformat(),
+        "acknowledged_at": datetime.now(UTC).isoformat(),
         "acknowledged_by": acknowledged_by
     }
     

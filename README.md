@@ -93,9 +93,10 @@ Natural, caring reminders woven into conversation:
 ```
 claracare/
 ├── docs/                  # 📚 Memory bank (full context)
-├── backend/               # Python FastAPI + voice agent
+├── backend/               # Python FastAPI + voice agent + cognitive + nostalgia + reports
 ├── dashboard/             # Next.js family dashboard
-├── sanity/                # Sanity CMS schemas
+├── studio-claracare/      # Sanity Studio v5 (5 schemas)
+├── .cursor/mcp.json       # Sanity MCP Server config
 ├── voice-web/             # Simple web voice interface
 ├── k8s/                   # Kubernetes manifests
 └── scripts/               # Utility scripts
@@ -146,11 +147,17 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-### 4. Set Up Sanity
+### 4. Set Up Sanity Studio
 ```bash
-cd sanity
+cd studio-claracare
 npm install
 npm run dev  # Opens Sanity Studio at localhost:3333
+```
+
+### 5. Seed Demo Data (Optional)
+```bash
+cd backend
+python3 -m scripts.seed_sanity
 ```
 
 ### 5. Or Use Docker Compose
@@ -247,11 +254,15 @@ See [docs/06-PROJECT-STRUCTURE.md](docs/06-PROJECT-STRUCTURE.md) for full deploy
 
 ## 🧪 Testing
 
-### Backend Tests
+### Backend Tests (109 tests)
 ```bash
 cd backend
-pytest
+python3 -m pytest tests/ -v
 ```
+
+Covers:
+- P2: Cognitive analyzer, baseline tracker, alert engine, pipeline, API routes
+- P3: SanityDataStore mappings, insights endpoint, nostalgia engine, PDF reports
 
 ### Frontend Tests
 ```bash
@@ -356,7 +367,9 @@ Built for the 54 million Americans caring for aging parents, and for our own par
 - **Phase 0**: ✅ Complete (Setup & Documentation)
 - **Phase 1**: ✅ Complete (Voice Agent Core — Deepgram + Twilio)
 - **Phase 2**: ✅ Complete (Cognitive Analysis, Alerts, Notifications, API Routes)
-- **Current Phase**: Phase 3 (Sanity CMS Integration, Nostalgia Mode)
+- **Phase 3**: ✅ Complete (Sanity CMS, SanityDataStore, Nostalgia Engine, Foxit Reports, Insights API)
+- **Current Phase**: Phase 4 (Frontend Dashboard)
+- **Test Suite**: ✅ 109 tests passing
 - **Deployment**: 🚧 In Progress
 - **Demo Video**: 🚧 In Progress
 - **Submissions**: ⏳ Pending
