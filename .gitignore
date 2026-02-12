@@ -19,6 +19,7 @@ venv/
 env/
 
 # IDE
+.cursor/
 .vscode/
 .idea/
 *.swp

@@ -6,7 +6,7 @@ Handles Clara initiating calls to patients
 import logging
 import os
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, UTC
 
 import httpx
 

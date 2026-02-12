@@ -7,7 +7,7 @@ import asyncio
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, Dict
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -206,7 +206,7 @@ class TwilioCallSession:
         self.conversation_transcript.append({
             "speaker": speaker,
             "text": text,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(UTC).isoformat()
         })
         
         logger.info(f"Transcript [{speaker}]: {text}")

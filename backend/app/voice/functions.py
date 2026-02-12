@@ -5,9 +5,12 @@ Implements the 6 core functions that Clara can call during conversations
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 import httpx
+
+# P3: Import nostalgia engine
+from app.nostalgia import YouComClient, calculate_golden_years
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,7 @@ class FunctionHandler:
         self.sanity_api_url = os.getenv("SANITY_API_URL", "http://localhost:8000/api/sanity")
         self.you_api_key = os.getenv("YOUCOM_API_KEY", "")
         self.cognitive_pipeline = cognitive_pipeline  # P2 cognitive pipeline
+        self.youcom_client = YouComClient(api_key=self.you_api_key)  # P3 nostalgia engine
         
     async def execute(self, function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -150,32 +154,38 @@ class FunctionHandler:
     
     async def search_nostalgia(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Fetch nostalgic content from patient's golden years (ages 15-25)
+        P3: Uses You.com API via nostalgia engine
         """
         patient_id = params.get("patient_id", self.patient_id)
         trigger_reason = params.get("trigger_reason", "")
         
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.sanity_api_url}/nostalgia",
-                    json={
-                        "patient_id": patient_id,
-                        "trigger_reason": trigger_reason
-                    },
-                    timeout=10.0
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return {
-                        "success": True,
-                        "content": data.get("content", {}),
-                        "golden_years": data.get("golden_years", "1960s-1970s")
-                    }
-                else:
-                    logger.warning(f"Failed to get nostalgia content: {response.status_code}")
-                    return self._default_nostalgia_response(trigger_reason)
+            # Get patient to determine birth year and golden years
+            patient = None
+            if self.cognitive_pipeline and self.cognitive_pipeline.data_store:
+                patient = await self.cognitive_pipeline.data_store.get_patient(patient_id)
+            
+            birth_year = None
+            if patient:
+                birth_year = patient.get("birth_year")
+            
+            # P3: Use nostalgia engine to fetch era-specific content
+            nostalgia_data = await self.youcom_client.search_nostalgia(
+                birth_year=birth_year,
+                trigger_reason=trigger_reason
+            )
+            
+            golden_years = "1960s-1970s"
+            if birth_year:
+                start_year, end_year = calculate_golden_years(birth_year)
+                golden_years = f"{start_year}s-{end_year}s"
+            
+            return {
+                "success": True,
+                "content": nostalgia_data,
+                "golden_years": golden_years,
+                "trigger_reason": trigger_reason
+            }
                     
         except Exception as e:
             logger.error(f"Error searching nostalgia: {e}")
@@ -191,14 +201,13 @@ class FunctionHandler:
                 "events": ["Moon landing in 1969", "Woodstock festival"],
                 "culture": "The golden age of rock and roll"
             },
-            "golden_years": "1960s-1970s",
-            "trigger_reason": trigger_reason,
-            "note": "Using default nostalgia content - Sanity not connected yet"
+            "trigger_reason": trigger_reason
         }
     
     async def search_realtime(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Search the web for real-time information using You.com API
+        Search for realtime information using You.com Search API
+        P3: Uses You.com client from nostalgia engine
         """
         query = params.get("query", "")
         patient_id = params.get("patient_id", self.patient_id)
@@ -210,57 +219,27 @@ class FunctionHandler:
             }
         
         try:
-            # You.com Search API
-            if self.you_api_key:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        "https://api.ydc-index.io/search",
-                        params={
-                            "query": query,
-                            "num_web_results": 3
-                        },
-                        headers={
-                            "X-API-Key": self.you_api_key
-                        },
-                        timeout=10.0
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        results = data.get("results", [])
-                        
-                        # Format results for Clara
-                        formatted_results = []
-                        for result in results[:3]:
-                            formatted_results.append({
-                                "title": result.get("title", ""),
-                                "snippet": result.get("description", ""),
-                                "url": result.get("url", "")
-                            })
-                        
-                        return {
-                            "success": True,
-                            "query": query,
-                            "results": formatted_results,
-                            "answer": self._summarize_results(formatted_results)
-                        }
+            # P3: Use nostalgia engine's You.com client
+            results = await self.youcom_client.search_realtime(query)
             
+            return {
+                "success": True,
+                "query": query,
+                "results": results.get("results", []),
+                "answer": results.get("answer", "Here's what I found..."),
+                "citations": results.get("citations", [])
+            }
+            
+        except Exception as e:
+            logger.error(f"Error searching realtime: {e}")
             # Fallback if You.com is not configured
-            logger.warning("You.com API key not configured, using fallback response")
+            logger.warning("You.com API error, using fallback response")
             return {
                 "success": True,
                 "query": query,
                 "results": [],
                 "answer": "I'd be happy to help, but I'm having trouble accessing that information right now. Could we talk about something else?",
-                "note": "You.com API not configured yet"
-            }
-            
-        except Exception as e:
-            logger.error(f"Error searching realtime: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "answer": "I'm having trouble looking that up right now, dear. Let's try again in a moment."
+                "note": "You.com API not available"
             }
     
     def _summarize_results(self, results: list) -> str:
@@ -291,7 +270,7 @@ class FunctionHandler:
                         "patient_id": patient_id,
                         "medication_name": medication_name,
                         "taken": taken,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "notes": notes
                     },
                     timeout=10.0
@@ -340,7 +319,7 @@ class FunctionHandler:
                         "severity": severity,
                         "alert_type": alert_type,
                         "message": message,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(UTC).isoformat()
                     },
                     timeout=10.0
                 )
@@ -429,7 +408,7 @@ class FunctionHandler:
                         "duration": duration,
                         "summary": summary,
                         "detected_mood": detected_mood,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(UTC).isoformat()
                     },
                     timeout=10.0
                 )
