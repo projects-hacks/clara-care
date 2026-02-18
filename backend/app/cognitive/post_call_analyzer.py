@@ -45,7 +45,9 @@ Return ONLY valid JSON with these fields:
   "engagement_level": "one of: high, medium, low — how engaged was the patient?",
   "loneliness_indicators": ["any statements suggesting loneliness or isolation"],
   "wants_to_talk_about": ["topics the patient seemed most excited about"],
-  "notable_requests": ["anything the patient specifically asked Clara to do or remember"]
+  "notable_requests": ["anything the patient specifically asked Clara to do or remember"],
+  "desire_to_connect": true/false,
+  "connection_context": "If desire_to_connect is true, briefly explain (e.g. 'Wants Sarah to visit', 'Asked if son will call')"
 }}"""
 
 

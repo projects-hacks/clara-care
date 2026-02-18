@@ -325,40 +325,59 @@ class TwilioCallSession:
     
     async def _create_safety_alerts(self, safety_flags: list, analysis: dict):
         """
-        Create automatic safety alerts when safety flags are detected.
-        This catches things like suicidal ideation, falls, severe distress.
+        Create automatic alerts when safety flags or connection desires are detected.
         """
         try:
             if not (self.deepgram_agent and self.deepgram_agent.function_handler):
                 logger.error("[SAFETY] Cannot create alerts — no function handler")
                 return
             
-            # Build a concise alert message
-            flag_summary = "; ".join(safety_flags[:3])  # Max 3 flags in message
-            action_items = analysis.get("action_items", [])
-            action_text = " Action needed: " + "; ".join(action_items) if action_items else ""
-            
-            message = f"During today's call, concerning statements were detected: {flag_summary}.{action_text}"
-            
-            logger.warning(
-                f"[SAFETY_ALERT] CallSid={self.call_sid} patient={self.patient_id} "
-                f"flags={len(safety_flags)}: {flag_summary}"
-            )
-            
-            await self.deepgram_agent.function_handler.execute(
-                "trigger_alert",
-                {
-                    "patient_id": self.patient_id,
-                    "severity": "high",
-                    "alert_type": "distress",
-                    "message": message
-                }
-            )
-            
-            logger.info(f"[SAFETY_ALERT_CREATED] CallSid={self.call_sid}")
+            # 1. Handle Safety Flags (High Severity)
+            if safety_flags:
+                flag_summary = "; ".join(safety_flags[:3])
+                action_items = analysis.get("action_items", [])
+                action_text = " Action needed: " + "; ".join(action_items) if action_items else ""
+                
+                message = f"During today's call, concerning statements were detected: {flag_summary}.{action_text}"
+                
+                logger.warning(
+                    f"[SAFETY_ALERT] CallSid={self.call_sid} patient={self.patient_id} "
+                    f"flags={len(safety_flags)}: {flag_summary}"
+                )
+                
+                await self.deepgram_agent.function_handler.execute(
+                    "trigger_alert",
+                    {
+                        "patient_id": self.patient_id,
+                        "severity": "high",
+                        "alert_type": "distress",
+                        "related_metrics": ["safety_flags"],
+                        "description": message  # 'message' param mapped to 'description' in trigger_alert
+                    }
+                )
+                logger.info(f"[SAFETY_ALERT_CREATED] CallSid={self.call_sid}")
+
+            # 2. Handle Desire to Connect (Medium Severity Opportunity)
+            if analysis.get("desire_to_connect"):
+                context = analysis.get("connection_context", "the patient asked about family")
+                message = f"Values a connection: {context}. Good opportunity to reach out."
+                
+                logger.info(f"[CONNECTION_ALERT] CallSid={self.call_sid} context={context}")
+                
+                await self.deepgram_agent.function_handler.execute(
+                    "trigger_alert",
+                    {
+                        "patient_id": self.patient_id,
+                        "severity": "medium",
+                        "alert_type": "social_connection",
+                        "related_metrics": ["loneliness_indicators"],
+                        "description": message
+                    }
+                )
+                logger.info(f"[CONNECTION_ALERT_CREATED] CallSid={self.call_sid}")
             
         except Exception as e:
-            logger.error(f"[SAFETY_ALERT_FAILED] CallSid={self.call_sid} error={e}")
+            logger.error(f"[ALERT_CREATION_FAILED] CallSid={self.call_sid} error={e}")
 
 
 class TwilioBridge:

@@ -283,7 +283,8 @@ class EmailNotifier:
             "word_finding_difficulty": "Difficulty finding words",
             "cognitive_decline": "Changes in cognitive performance",
             "coherence_issues": "Changes in conversation clarity",
-            "baseline_deviation": "Unusual patterns detected"
+            "baseline_deviation": "Unusual patterns detected",
+            "social_connection": "Social Connection Opportunity"
         }
         return friendly_names.get(alert_type, alert_type.replace('_', ' ').title())
     
