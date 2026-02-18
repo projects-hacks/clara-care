@@ -6,7 +6,7 @@ const CACHE_NAME = 'claracare-v2'
 const PRECACHE_URLS = [
     '/',
     '/dashboard',
-    '/dashboard/alert',
+    '/dashboard/alerts',
     '/dashboard/history',
     '/dashboard/trends',
     '/dashboard/settings',
