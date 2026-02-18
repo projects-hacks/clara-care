@@ -174,6 +174,9 @@ class FunctionHandler:
         patient_id = params.get("patient_id", self.patient_id)
         trigger_reason = params.get("trigger_reason", "")
         
+        logger.info(f"💾 TOOL: search_nostalgia triggered for {patient_id}. Reason: {trigger_reason}")
+
+        
         try:
             # Get patient to determine birth year and golden years
             patient = None
