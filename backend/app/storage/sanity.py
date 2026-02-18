@@ -274,21 +274,25 @@ class SanityDataStore:
             if not patient:
                 return None
             
-            # If no inline familyContacts, query standalone familyMember docs
-            if not patient.get("family_contacts"):
+            # Always query standalone familyMember docs if no inline contacts
+            existing_contacts = patient.get("family_contacts")
+            logger.info(f"Patient {patient_id}: inline family_contacts = {type(existing_contacts).__name__}({len(existing_contacts) if existing_contacts else 0})")
+            
+            if not existing_contacts:
                 try:
                     fm_result = await self._query_groq(
                         '*[_type == "familyMember" && $pid in patients[]._ref]',
                         {"pid": patient_id},
                     )
                     fm_docs = fm_result.get("result") or []
+                    logger.info(f"familyMember query for {patient_id}: found {len(fm_docs)} docs")
                     if fm_docs:
                         patient["family_contacts"] = [
                             self._map_family_contact(fc) for fc in fm_docs if fc
                         ]
-                        logger.info(f"Found {len(fm_docs)} family members for {patient_id} from familyMember docs")
+                        logger.info(f"Mapped {len(patient['family_contacts'])} family contacts for {patient_id}")
                 except Exception as e:
-                    logger.error(f"Error fetching family members for {patient_id}: {e}")
+                    logger.error(f"Error fetching family members for {patient_id}: {e}", exc_info=True)
             
             return patient
         except Exception as exc:
