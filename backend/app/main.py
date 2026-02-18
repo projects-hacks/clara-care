@@ -19,7 +19,7 @@ load_dotenv(dotenv_path=env_path)
 
 from .voice import twilio_bridge, session_manager, outbound_manager
 
-# Import P2 components
+# Cognitive analysis and storage components
 from .storage import InMemoryDataStore, SanityDataStore
 from .cognitive.analyzer import CognitiveAnalyzer
 from .cognitive.baseline import BaselineTracker
@@ -34,16 +34,16 @@ from .routes import (
 )
 from .routes import patients, conversations, wellness, alerts
 
-# P3 imports
+# Data insights, reports, and nostalgia routes
 try:
     from .routes.insights import router as insights_router
     from .routes.reports import router as reports_router
-    HAS_P3_ROUTES = True
+    HAS_DATA_ROUTES = True
 except ImportError as e:
-    HAS_P3_ROUTES = False
+    HAS_DATA_ROUTES = False
     # logger not available yet at module level
     import sys
-    print(f"Warning: P3 routes not available: {e}", file=sys.stderr)
+    print(f"Warning: Optional routes not available: {e}", file=sys.stderr)
 
 # Configure logging
 logging.basicConfig(
@@ -62,10 +62,10 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting ClaraCare backend...")
     
-    # Initialize P2 components
+    # Initialize cognitive analysis components
     logger.info("Initializing cognitive analysis system...")
     
-    # P3: Decide between Sanity and in-memory storage
+    # Decide between Sanity and in-memory storage based on available credentials
     sanity_project_id = os.getenv("SANITY_PROJECT_ID")
     sanity_dataset = os.getenv("SANITY_DATASET")
     sanity_token = os.getenv("SANITY_TOKEN")
@@ -114,8 +114,8 @@ async def lifespan(app: FastAPI):
     # Set cognitive pipeline in route modules
     conversations.set_cognitive_pipeline(cognitive_pipeline)
     
-    # P3: Set data store in insights and reports routes if available
-    if HAS_P3_ROUTES:
+    # Set data store in insights and reports routes if available
+    if HAS_DATA_ROUTES:
         from .routes import insights, reports
         from .reports.generator import ReportGenerator
         from .reports.foxit_client import FoxitClient
@@ -128,9 +128,9 @@ async def lifespan(app: FastAPI):
         report_gen = ReportGenerator(data_store, foxit_client)
         reports.set_report_generator(report_gen)
         
-        logger.info("✓ P3 routes initialized")
+        logger.info("✓ Data routes initialized")
     
-    # Set cognitive pipeline in Twilio bridge (P2 integration)
+    # Set cognitive pipeline in Twilio bridge for real-time analysis
     twilio_bridge.set_cognitive_pipeline(cognitive_pipeline)
     
     logger.info("Cognitive analysis system initialized ✓")
@@ -140,7 +140,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down ClaraCare backend...")
     
-    # P3: Cleanup Sanity client if using SanityDataStore
+    # Cleanup Sanity client if using SanityDataStore
     if isinstance(data_store, SanityDataStore):
         await data_store.close()
 
@@ -162,17 +162,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register P2 API routers
+# Register API routers
 app.include_router(patients_router)
 app.include_router(conversations_router)
 app.include_router(wellness_router)
 app.include_router(alerts_router)
 
-# Register P3 API routers if available
-if HAS_P3_ROUTES:
+# Register data routes if available
+if HAS_DATA_ROUTES:
     app.include_router(insights_router)
     app.include_router(reports_router)
-    logger.info("✓ P3 routes registered")
+    logger.info("✓ Data routes registered")
 
 
 @app.get("/")
@@ -195,6 +195,68 @@ async def health_check():
     }
 
 
+@app.get("/dev/status")
+async def dev_status():
+    """
+    Developer diagnostic endpoint
+    Shows system health, active sessions, Twilio config, and pipeline readiness.
+    Use this to verify the system is properly configured before making a call.
+    """
+    from .voice.outbound import outbound_manager
+    
+    # Check Twilio config
+    twilio_ok = bool(
+        outbound_manager.account_sid 
+        and outbound_manager.auth_token 
+        and outbound_manager.from_number
+    )
+    
+    # Check Deepgram config
+    deepgram_key = os.getenv("DEEPGRAM_API_KEY", "")
+    deepgram_ok = bool(deepgram_key and len(deepgram_key) > 10)
+    
+    # Check cognitive pipeline
+    pipeline_ready = twilio_bridge.cognitive_pipeline is not None
+    
+    # Active call details
+    active_calls = []
+    for call_sid, session in twilio_bridge.active_calls.items():
+        duration = 0
+        if session.call_start_time:
+            from datetime import datetime, UTC
+            duration = int((datetime.now(UTC) - session.call_start_time).total_seconds())
+        active_calls.append({
+            "call_sid": call_sid,
+            "patient_id": session.patient_id,
+            "is_active": session.is_active,
+            "duration_sec": duration,
+            "transcript_turns": len(session.conversation_transcript),
+        })
+    
+    return {
+        "system": "claracare-backend",
+        "status": "ready" if (twilio_ok and deepgram_ok) else "misconfigured",
+        "config": {
+            "twilio": {
+                "configured": twilio_ok,
+                "phone_number": outbound_manager.from_number or "NOT_SET",
+                "server_url": outbound_manager.server_url,
+            },
+            "deepgram": {
+                "configured": deepgram_ok,
+            },
+            "cognitive_pipeline": {
+                "ready": pipeline_ready,
+            },
+        },
+        "calls": {
+            "active_count": twilio_bridge.get_active_call_count(),
+            "agent_sessions": len(session_manager.sessions),
+            "active_calls": active_calls,
+        },
+    }
+
+
 @app.get("/voice/twiml")
 async def twiml_handler(patient_id: str = "demo-patient"):
     """
@@ -204,7 +266,7 @@ async def twiml_handler(patient_id: str = "demo-patient"):
     Query params:
         patient_id: Patient identifier
     """
-    server_url = os.getenv("SERVER_PUBLIC_URL", "http://localhost:5000")
+    server_url = os.getenv("SERVER_PUBLIC_URL", "http://localhost:8000")
     
     # Strip protocol to get hostname for WSS URL
     ws_host = server_url.replace('https://', '').replace('http://', '')
@@ -228,8 +290,16 @@ async def call_status_callback(request: Request):
     form_data = await request.form()
     call_sid = form_data.get("CallSid")
     call_status = form_data.get("CallStatus")
+    call_duration = form_data.get("CallDuration", "N/A")
+    direction = form_data.get("Direction", "unknown")
+    from_number = form_data.get("From", "")
+    to_number = form_data.get("To", "")
     
-    logger.info(f"Call status update: {call_sid} - {call_status}")
+    logger.info(
+        f"[TWILIO_STATUS] CallSid={call_sid} status={call_status} "
+        f"duration={call_duration}s direction={direction} "
+        f"from={from_number} to={to_number}"
+    )
     
     return {"status": "received"}
 
@@ -371,7 +441,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=5000,
+        port=8000,
         reload=True,
         log_level="info"
     )

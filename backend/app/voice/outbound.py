@@ -27,6 +27,12 @@ class OutboundCallManager:
         
         # Your server's public URL (from ngrok or production domain)
         self.server_url = os.getenv("SERVER_PUBLIC_URL", "http://localhost:8000")
+        
+        logger.info(
+            f"[OUTBOUND_INIT] twilio_sid={'configured' if self.account_sid else 'MISSING'} "
+            f"twilio_phone={'configured' if self.from_number else 'MISSING'} "
+            f"server_url={self.server_url}"
+        )
     
     async def call_patient(
         self,
@@ -86,8 +92,8 @@ class OutboundCallManager:
                 status = data.get("status")
                 
                 logger.info(
-                    f"Outbound call initiated to {patient_name} ({patient_phone}): "
-                    f"CallSid={call_sid}, Status={status}"
+                    f"[OUTBOUND_CALL_OK] patient={patient_name} phone={patient_phone} "
+                    f"CallSid={call_sid} status={status}"
                 )
                 
                 return {

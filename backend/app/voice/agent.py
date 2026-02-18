@@ -188,7 +188,7 @@ class DeepgramVoiceAgent:
         function_name = message.get("function_name")
         input_data = message.get("input", {})
         
-        logger.info(f"Function call request: {function_name} with params {input_data}")
+        logger.info(f"[FUNC_CALL] function={function_name} params={input_data}")
         
         try:
             # Execute the function
@@ -202,7 +202,7 @@ class DeepgramVoiceAgent:
             }
             
             await self.deepgram_ws.send(json.dumps(response))
-            logger.info(f"Sent function call response for {function_name}")
+            logger.info(f"[FUNC_RESULT] function={function_name} result_keys={list(result.keys()) if isinstance(result, dict) else 'non-dict'}")
             
         except Exception as e:
             logger.error(f"Error executing function {function_name}: {e}")
@@ -292,7 +292,7 @@ class AgentSessionManager:
         Args:
             session_id: Unique identifier for this call (e.g., Twilio CallSid)
             patient_id: Patient identifier
-            cognitive_pipeline: Optional cognitive pipeline for P2 integration
+            cognitive_pipeline: Optional cognitive pipeline for real-time analysis
             
         Returns:
             DeepgramVoiceAgent instance

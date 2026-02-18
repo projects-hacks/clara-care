@@ -102,6 +102,7 @@ class TwilioCallSession:
         
         self.is_active = False
         self.conversation_transcript: list = []
+        self.call_start_time: Optional[datetime] = None
         
     async def start(self) -> bool:
         """
@@ -109,7 +110,9 @@ class TwilioCallSession:
         Connect to Deepgram and set up audio bridging
         """
         try:
-            # Create Deepgram agent session (P2: pass cognitive pipeline)
+            self.call_start_time = datetime.now(UTC)
+            
+            # Create Deepgram agent session with cognitive pipeline
             self.deepgram_agent = await session_manager.create_session(
                 session_id=self.call_sid,
                 patient_id=self.patient_id,
@@ -124,11 +127,14 @@ class TwilioCallSession:
             )
             
             self.is_active = True
-            logger.info(f"Started call session {self.call_sid} for patient {self.patient_id}")
+            logger.info(
+                f"[CALL_START] CallSid={self.call_sid} patient={self.patient_id} "
+                f"pipeline={'enabled' if self.cognitive_pipeline else 'disabled'}"
+            )
             return True
             
         except Exception as e:
-            logger.error(f"Failed to start call session: {e}")
+            logger.error(f"[CALL_START_FAILED] CallSid={self.call_sid} error={e}", exc_info=True)
             return False
     
     async def handle_twilio_message(self, message: Dict):
@@ -220,39 +226,82 @@ class TwilioCallSession:
     async def end(self):
         """
         End the call session
-        Clean up resources
+        Clean up resources and run cognitive pipeline
         """
         if not self.is_active:
             return
             
         self.is_active = False
         
+        # Calculate call duration
+        call_duration_sec = 0
+        if self.call_start_time:
+            call_duration_sec = int((datetime.now(UTC) - self.call_start_time).total_seconds())
+        
+        total_turns = len(self.conversation_transcript)
+        patient_turns = sum(1 for t in self.conversation_transcript if t.get('speaker', '').lower() != 'clara')
+        agent_turns = total_turns - patient_turns
+        
+        logger.info(
+            f"[CALL_ENDING] CallSid={self.call_sid} duration={call_duration_sec}s "
+            f"total_turns={total_turns} patient_turns={patient_turns} agent_turns={agent_turns}"
+        )
+        
         # Save conversation transcript before cleanup
+        pipeline_result = None
         if self.conversation_transcript and self.deepgram_agent:
             try:
                 transcript_text = "\n".join(
                     f"{t['speaker']}: {t['text']}" 
                     for t in self.conversation_transcript
                 )
-                await self.deepgram_agent.function_handler.execute(
+                
+                logger.info(
+                    f"[TRANSCRIPT_SAVE] CallSid={self.call_sid} "
+                    f"transcript_length={len(transcript_text)} chars"
+                )
+                
+                pipeline_result = await self.deepgram_agent.function_handler.execute(
                     "save_conversation",
                     {
                         "patient_id": self.patient_id,
                         "transcript": transcript_text,
-                        "duration": len(self.conversation_transcript) * 5,  # Approximate
-                        "summary": f"Call with {len(self.conversation_transcript)} exchanges",
+                        "duration": call_duration_sec or len(self.conversation_transcript) * 5,
+                        "summary": f"Call with {total_turns} exchanges over {call_duration_sec}s",
                         "detected_mood": "neutral"
                     }
                 )
-                logger.info(f"Saved conversation transcript for call {self.call_sid}")
+                
+                if pipeline_result and pipeline_result.get("success"):
+                    logger.info(
+                        f"[PIPELINE_COMPLETE] CallSid={self.call_sid} "
+                        f"conversation_id={pipeline_result.get('conversation_id')} "
+                        f"cognitive_score={pipeline_result.get('cognitive_score')} "
+                        f"alerts={pipeline_result.get('alerts_generated', 0)}"
+                    )
+                else:
+                    logger.warning(
+                        f"[PIPELINE_INCOMPLETE] CallSid={self.call_sid} "
+                        f"result={pipeline_result}"
+                    )
+                    
             except Exception as e:
-                logger.error(f"Failed to save conversation: {e}")
+                logger.error(f"[TRANSCRIPT_SAVE_FAILED] CallSid={self.call_sid} error={e}", exc_info=True)
+        else:
+            logger.warning(
+                f"[NO_TRANSCRIPT] CallSid={self.call_sid} "
+                f"transcript_empty={not self.conversation_transcript} "
+                f"agent_exists={self.deepgram_agent is not None}"
+            )
         
         # Close Deepgram session
         if self.call_sid:
             await session_manager.close_session(self.call_sid)
         
-        logger.info(f"Ended call session {self.call_sid}")
+        logger.info(
+            f"[CALL_END] CallSid={self.call_sid} duration={call_duration_sec}s "
+            f"turns={total_turns} pipeline={'success' if pipeline_result and pipeline_result.get('success') else 'failed'}"
+        )
 
 
 class TwilioBridge:
@@ -263,7 +312,7 @@ class TwilioBridge:
     
     def __init__(self):
         self.active_calls: Dict[str, TwilioCallSession] = {}
-        self.cognitive_pipeline = None  # P2: will be set by main.py
+        self.cognitive_pipeline = None  # Set by main.py during startup
     
     def set_cognitive_pipeline(self, pipeline):
         """Set the cognitive pipeline (called during app startup)"""
@@ -305,7 +354,7 @@ class TwilioBridge:
                     await websocket.close()
                     return
                 
-                # Create call session (P2: pass cognitive pipeline)
+                # Create call session with cognitive pipeline
                 call_session = TwilioCallSession(
                     twilio_ws=websocket,
                     patient_id=patient_id,

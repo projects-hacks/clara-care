@@ -1,3 +1,6 @@
+// ClaraCare API Client
+// Connects to the ClaraCare backend API for patient data, conversations, and call initiation
+
 export interface Patient {
   id: string
   name: string
@@ -23,6 +26,7 @@ export interface Patient {
     consecutive_trigger: number
   }
   call_schedule?: { preferred_time: string; timezone: string }
+  phone_number?: string
   family_contacts?: {
     id: string
     name: string
@@ -110,6 +114,15 @@ export interface Insights {
   }
 }
 
+export interface CallResult {
+  success: boolean
+  call_sid?: string
+  patient_id?: string
+  patient_phone?: string
+  status?: string
+  error?: string
+}
+
 import {
   mockPatient,
   mockConversations,
@@ -119,9 +132,10 @@ import {
   mockInsights,
 } from './mock-data'
 
-const USE_MOCK = true
+// Toggle mock mode — set to false for live backend
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.claracare.me'
 const PATIENT_ID = process.env.NEXT_PUBLIC_PATIENT_ID || 'patient-dorothy-001'
 
 export function getPatientId(): string {
@@ -130,14 +144,20 @@ export function getPatientId(): string {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T | null> {
   if (USE_MOCK) return null
+  const url = `${API_URL}${path}`
   try {
-    const res = await fetch(`${API_URL}${path}`, {
+    console.debug(`[ClaraCare API] ${options?.method || 'GET'} ${path}`)
+    const res = await fetch(url, {
       ...options,
       headers: { 'Content-Type': 'application/json', ...options?.headers },
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.warn(`[ClaraCare API] ${path} → ${res.status} ${res.statusText}`)
+      return null
+    }
     return await res.json()
-  } catch {
+  } catch (e) {
+    console.error(`[ClaraCare API] ${path} → Network error:`, e)
     return null
   }
 }
@@ -231,4 +251,35 @@ export async function updatePatient(patientId: string, updates: Partial<Patient>
     body: JSON.stringify(updates),
   })
   return res !== null
+}
+
+// Call initiation — triggers an outbound call to the patient
+export async function callPatient(
+  patientId: string,
+  patientPhone: string,
+  patientName?: string
+): Promise<CallResult> {
+  console.log(`[ClaraCare Call] Initiating call to ${patientName} (${patientPhone}) patient=${patientId}`)
+  try {
+    const res = await fetch(`${API_URL}/voice/call/patient`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patient_id: patientId,
+        patient_phone: patientPhone,
+        patient_name: patientName || 'Patient',
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      console.error(`[ClaraCare Call] Failed: ${res.status}`, err)
+      return { success: false, error: err.detail || 'Call failed' }
+    }
+    const result = await res.json()
+    console.log(`[ClaraCare Call] Success:`, result)
+    return result
+  } catch (e) {
+    console.error(`[ClaraCare Call] Network error:`, e)
+    return { success: false, error: e instanceof Error ? e.message : 'Network error' }
+  }
 }
