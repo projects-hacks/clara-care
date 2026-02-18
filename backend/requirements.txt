@@ -15,20 +15,16 @@ httpx==0.27.2
 # Data Validation
 pydantic==2.9.2
 
-# NLP & Cognitive Analysis (P2)
+# NLP & Cognitive Analysis
 spacy==3.7.2
 sentence-transformers==2.3.1
 numpy==1.26.3
 scikit-learn==1.4.0
 
-# Email Notifications (P2)
+# Email Notifications
 aiosmtplib==3.0.1
 jinja2==3.1.3
 
 # Testing
 pytest==8.0.0
 pytest-asyncio==0.23.5
-# Note: httpx (listed above) is also used by FastAPI TestClient
-
-# Optional (will add when needed)
-# sanity-client==1.0.0  # For Sanity CMS integration

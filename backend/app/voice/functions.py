@@ -9,7 +9,7 @@ from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 import httpx
 
-# P3: Import nostalgia engine
+# Nostalgia engine for era-specific content
 from app.nostalgia import YouComClient, calculate_golden_years
 
 logger = logging.getLogger(__name__)
@@ -24,8 +24,8 @@ class FunctionHandler:
         self.patient_id = patient_id
         self.sanity_api_url = os.getenv("SANITY_API_URL", "http://localhost:8000/api/sanity")
         self.you_api_key = os.getenv("YOUCOM_API_KEY", "")
-        self.cognitive_pipeline = cognitive_pipeline  # P2 cognitive pipeline
-        self.youcom_client = YouComClient(api_key=self.you_api_key)  # P3 nostalgia engine
+        self.cognitive_pipeline = cognitive_pipeline
+        self.youcom_client = YouComClient(api_key=self.you_api_key)
         
     async def execute(self, function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -74,7 +74,7 @@ class FunctionHandler:
         """
         patient_id = params.get("patient_id", self.patient_id)
         
-        # First try to get from cognitive pipeline's data store (P2)
+        # First try to get from cognitive pipeline's data store
         if self.cognitive_pipeline and self.cognitive_pipeline.data_store:
             try:
                 patient = await self.cognitive_pipeline.data_store.get_patient(patient_id)
@@ -102,7 +102,7 @@ class FunctionHandler:
             except Exception as e:
                 logger.warning(f"Could not get patient from data store: {e}")
         
-        # Fallback to Sanity API (P3)
+        # Fallback to Sanity API
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
@@ -154,7 +154,7 @@ class FunctionHandler:
     
     async def search_nostalgia(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        P3: Uses You.com API via nostalgia engine
+        Uses You.com API via nostalgia engine for era-specific content
         """
         patient_id = params.get("patient_id", self.patient_id)
         trigger_reason = params.get("trigger_reason", "")
@@ -170,7 +170,7 @@ class FunctionHandler:
                 if patient:
                     birth_year = patient.get("birth_year", 1951)
             
-            # P3: Use nostalgia engine to fetch era-specific content
+            # Use nostalgia engine to fetch era-specific content
             # Check if we have a client before calling
             if hasattr(self, 'youcom_client') and self.youcom_client:
                 nostalgia_data = await self.youcom_client.search_nostalgia(
@@ -214,7 +214,7 @@ class FunctionHandler:
     async def search_realtime(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Search for realtime information using You.com Search API
-        P3: Uses You.com client from nostalgia engine
+        Uses You.com client from nostalgia engine for real-time search
         """
         query = params.get("query", "")
         patient_id = params.get("patient_id", self.patient_id)
@@ -226,7 +226,7 @@ class FunctionHandler:
             }
         
         try:
-            # P3: Use nostalgia engine's You.com client
+            # Use nostalgia engine's You.com client
             results = await self.youcom_client.search_realtime(query)
             
             return {
@@ -346,16 +346,16 @@ class FunctionHandler:
     async def save_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Save the conversation transcript, summary, and cognitive metrics
-        P2 INTEGRATION: Run through cognitive pipeline
+        Runs conversation through cognitive analysis pipeline
         """
         patient_id = params.get("patient_id", self.patient_id)
         transcript = params.get("transcript", "")
         duration = params.get("duration", 0)
         summary = params.get("summary", "")
         detected_mood = params.get("detected_mood", "neutral")
-        response_times = params.get("response_times")  # P2: optional timing data
+        response_times = params.get("response_times")  # Optional timing data for analysis
         
-        # P2: If cognitive pipeline is available, run full analysis
+        # If cognitive pipeline is available, run full analysis
         if self.cognitive_pipeline:
             try:
                 logger.info("Running cognitive analysis pipeline...")

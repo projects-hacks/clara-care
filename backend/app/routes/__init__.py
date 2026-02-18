@@ -8,7 +8,7 @@ from .conversations import router as conversations_router
 from .wellness import router as wellness_router
 from .alerts import router as alerts_router
 
-# P3 routes
+# Data insight and report routes
 try:
     from .insights import router as insights_router
     from .reports import router as reports_router

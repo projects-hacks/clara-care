@@ -9,7 +9,7 @@ from typing import Protocol, Optional
 class DataStore(Protocol):
     """
     Protocol defining the interface for patient data storage
-    Implementations: InMemoryDataStore (P2), SanityDataStore (P3)
+    Implementations: InMemoryDataStore, SanityDataStore
     """
     
     async def get_patient(self, patient_id: str) -> Optional[dict]:

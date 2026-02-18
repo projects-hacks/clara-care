@@ -1,7 +1,7 @@
 """
 In-Memory Data Store Implementation
 Development/testing storage with pre-seeded Dorothy test data
-Allows P2 to work without Sanity (P3 will add SanityDataStore)
+In-memory fallback when Sanity is not configured
 """
 
 import uuid

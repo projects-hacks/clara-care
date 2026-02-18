@@ -1,5 +1,5 @@
 """
-You.com API Client for ClaraCare P3 Integration
+You.com API Client for ClaraCare Nostalgia Integration
 
 Official Documentation: https://you.com/platform
 Hackathon Track: Build AI Agents That Think, Reason & Search Live

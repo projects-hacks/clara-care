@@ -1,5 +1,5 @@
 """
-Shared utility functions for P2 Cognitive Analysis
+Shared utility functions for Cognitive Analysis
 """
 
 
