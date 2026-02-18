@@ -548,10 +548,7 @@ class SanityDataStore:
             if "acknowledged" in updates:
                 sanity_set["acknowledged"] = updates["acknowledged"]
             if "acknowledged_by" in updates:
-                sanity_set["acknowledgedBy"] = {
-                    "_ref": updates["acknowledged_by"],
-                    "_type": "reference",
-                }
+                sanity_set["acknowledgedBy"] = updates["acknowledged_by"]
             if "acknowledged_at" in updates:
                 sanity_set["acknowledgedAt"] = updates["acknowledged_at"]
             await self._mutate([{"patch": {"id": alert_id, "set": sanity_set}}])

@@ -55,9 +55,15 @@ export const alert = defineType({
     defineField({
       name: 'acknowledgedBy',
       title: 'Acknowledged By',
-      type: 'reference',
-      to: [{ type: 'familyMember' }],
-      description: 'Family member who acknowledged this alert',
+      type: 'string',
+      description: 'Name of the person who acknowledged this alert',
+      hidden: ({ parent }) => !parent?.acknowledged,
+    }),
+    defineField({
+      name: 'acknowledgedAt',
+      title: 'Acknowledged At',
+      type: 'datetime',
+      description: 'When this alert was acknowledged',
       hidden: ({ parent }) => !parent?.acknowledged,
     }),
     defineField({
