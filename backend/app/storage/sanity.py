@@ -92,6 +92,12 @@ class SanityDataStore:
             return None
         prefs = doc.get("preferences", {})
         call_sched = doc.get("callSchedule", {})
+        # Normalize communication_style: old Sanity data stores as array, new as string
+        raw_comm = prefs.get("communicationStyle", "")
+        if isinstance(raw_comm, list):
+            comm_style = raw_comm[0] if raw_comm else ""
+        else:
+            comm_style = raw_comm or ""
         result = {
             "id": doc["_id"],
             "name": doc.get("name"),
@@ -105,7 +111,7 @@ class SanityDataStore:
             "phone_number": doc.get("phoneNumber"),
             "preferences": {
                 "favorite_topics": prefs.get("favoriteTopics", []),
-                "communication_style": prefs.get("communicationStyle", ""),
+                "communication_style": comm_style,
                 "interests": prefs.get("interests", []),
                 "topics_to_avoid": prefs.get("topicsToAvoid", []),
             },
