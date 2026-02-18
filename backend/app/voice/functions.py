@@ -318,7 +318,8 @@ class FunctionHandler:
     
     async def trigger_alert(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Send an urgent alert to family members
+        Send an urgent alert to family members.
+        Uses AlertEngine directly for proper alert creation + email dispatch.
         """
         patient_id = params.get("patient_id", self.patient_id)
         severity = params.get("severity", "medium")
@@ -326,36 +327,38 @@ class FunctionHandler:
         message = params.get("message", "")
         
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.sanity_api_url}/alerts",
-                    json={
-                        "patient_id": patient_id,
-                        "severity": severity,
-                        "alert_type": alert_type,
-                        "message": message,
-                        "timestamp": datetime.now(UTC).isoformat()
-                    },
-                    timeout=10.0
+            # Use AlertEngine directly (handles save + email dispatch)
+            if self.cognitive_pipeline and hasattr(self.cognitive_pipeline, 'alert_engine'):
+                alert_engine = self.cognitive_pipeline.alert_engine
+                alert = await alert_engine.create_realtime_alert(
+                    patient_id=patient_id,
+                    alert_type=alert_type,
+                    severity=severity,
+                    message=message,
+                    context={"source": "voice_agent"}
                 )
+                return {
+                    "success": True,
+                    "message": "Alert sent to family members",
+                    "alert_id": alert.get("id", "")
+                }
+            else:
+                # Fallback: log the alert if AlertEngine not available
+                logger.warning("AlertEngine not available — logging alert only")
+                logger.critical(f"ALERT [{severity}] - {alert_type}: {message} (Patient: {patient_id})")
+                return {
+                    "success": True,
+                    "message": "Alert logged (AlertEngine not available)",
+                    "alert_id": ""
+                }
                 
-                if response.status_code == 200:
-                    return {
-                        "success": True,
-                        "message": "Alert sent to family members",
-                        "alert_id": response.json().get("alert_id", "")
-                    }
-                else:
-                    raise Exception(f"API status {response.status_code}")
-                    
         except Exception as e:
             logger.error(f"Error triggering alert: {e}")
-            # Log alert locally if Sanity is not available
             logger.critical(f"ALERT [{severity}] - {alert_type}: {message} (Patient: {patient_id})")
             return {
                 "success": True,
                 "message": "Alert logged",
-                "note": "Logged locally - Sanity not connected yet. In production, this would notify family."
+                "note": "Error occurred but alert was logged locally."
             }
     
     async def save_conversation(self, params: Dict[str, Any]) -> Dict[str, Any]:

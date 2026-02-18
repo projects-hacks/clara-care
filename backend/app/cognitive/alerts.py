@@ -185,8 +185,8 @@ class AlertEngine:
         
         logger.critical(f"REALTIME ALERT: {alert_type} ({severity}) - {message}")
         
-        # Dispatch notification immediately for high-severity real-time alerts
-        if severity == "high" and self.notification_service:
+        # Dispatch notification for high and medium severity real-time alerts
+        if severity in ("high", "medium") and self.notification_service:
             await self._dispatch_notifications(patient_id, [alert])
         
         return alert

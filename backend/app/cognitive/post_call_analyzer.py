@@ -1,189 +1,350 @@
 """
-Post-Call LLM Analyzer
-Uses OpenAI to analyze conversation transcripts after each call.
-Replaces the naive _generate_summary() and _infer_mood_from_transcript()
-with intelligent, structured analysis.
+Post-Call Analyzer — Deepgram Text Intelligence + Elder-Care Keyword Analysis
+
+Uses Deepgram's built-in Text Intelligence API for:
+  - Summarization
+  - Sentiment analysis  
+  - Topic detection
+  - Intent recognition
+
+Then layers elder-care-specific keyword analysis for:
+  - Safety flags (suicidal ideation, falls, self-harm)
+  - Medication tracking
+  - Loneliness / desire to connect
+  - Mood refinement
+
+No OpenAI API key required — uses the existing DEEPGRAM_API_KEY.
 """
 
 import json
 import logging
 import os
+import re
 from typing import Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-# Safety keywords that should ALWAYS trigger a distress alert
+# ─── Safety keywords (highest priority) ────────────────────────────────────────
 SAFETY_KEYWORDS = [
     "suicide", "suicidal", "kill myself", "end my life", "jump",
     "don't want to live", "better off dead", "hurt myself",
     "can't go on", "no reason to live", "want to die",
     "overdose", "cut myself", "harm myself", "self harm",
-    "jump from", "jump off", "end it all"
+    "jump from", "jump off", "end it all",
 ]
 
-ANALYSIS_PROMPT = """You are analyzing a phone conversation between Clara (an AI companion) and an elderly patient. 
-Extract the following information as JSON. Be warm and family-friendly in your summaries — the family member reading this genuinely cares about their parent.
+# ─── Loneliness indicators ──────────────────────────────────────────────────────
+LONELINESS_KEYWORDS = [
+    "lonely", "alone", "no one", "nobody", "miss my",
+    "wish someone", "all by myself", "no visitors",
+    "nobody calls", "nobody visits", "feeling isolated",
+    "missing people", "missing family",
+]
 
-Conversation transcript:
-{transcript}
+# ─── Desire to connect (wants to see/talk to family) ───────────────────────────
+CONNECTION_PHRASES = [
+    "wish.*could come", "wish.*would visit", "want.*to meet",
+    "want.*to see", "want.*to visit", "come and meet",
+    "come and see", "hope.*calls", "hope.*visits",
+    "want.*to talk to", "miss.*son", "miss.*daughter",
+    "miss.*family", "want.*come over", "like.*to visit",
+    "wondering if.*could come", "want him to come",
+    "want her to come", "family get together",
+    "spend.*time with me",
+]
 
-Return ONLY valid JSON with these fields:
-{{
-  "summary": "2-3 sentence summary for the family member. Focus on topics discussed, emotional state, and anything noteworthy. Write warmly, like you're updating a caring family member.",
-  "mood": "one of: happy, neutral, sad, confused, distressed, nostalgic",
-  "mood_explanation": "1 sentence explaining why you chose this mood",
-  "topics": ["list", "of", "main", "topics", "discussed"],
-  "action_items": ["things the family should know or act on"],
-  "medication_status": {{
-    "discussed": true/false,
-    "medications_mentioned": [{{"name": "med name", "taken": true/false/null}}],
-    "notes": "any relevant medication notes"
-  }},
-  "safety_flags": ["any concerning statements about self-harm, falls, pain, or emergencies — quote the exact words"],
-  "engagement_level": "one of: high, medium, low — how engaged was the patient?",
-  "loneliness_indicators": ["any statements suggesting loneliness or isolation"],
-  "wants_to_talk_about": ["topics the patient seemed most excited about"],
-  "notable_requests": ["anything the patient specifically asked Clara to do or remember"],
-  "desire_to_connect": true/false,
-  "connection_context": "If desire_to_connect is true, briefly explain (e.g. 'Wants Sarah to visit', 'Asked if son will call')"
-}}"""
+KNOWN_MEDS = ["lisinopril", "vitamin d", "metformin", "aspirin", "amlodipine"]
 
 
 async def analyze_transcript(transcript: str) -> dict:
     """
-    Analyze a conversation transcript using OpenAI.
-    
-    Returns structured analysis dict, or a fallback if OpenAI is unavailable.
+    Analyze a conversation transcript using Deepgram Text Intelligence
+    + elder-care keyword analysis.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
+    # 1. Deepgram Text Intelligence (summary, sentiment, topics, intents)
+    dg_analysis = await _deepgram_analyze(transcript)
+    
+    # 2. Elder-care keyword analysis (safety, meds, loneliness, connection)
+    care_analysis = _elder_care_analysis(transcript)
+    
+    # 3. Merge into unified result
+    result = _merge_analysis(dg_analysis, care_analysis, transcript)
+    
+    logger.info(
+        f"[POST_CALL_ANALYSIS] mood={result.get('mood')}, "
+        f"topics={result.get('topics')}, "
+        f"safety_flags={len(result.get('safety_flags', []))}, "
+        f"desire_to_connect={result.get('desire_to_connect')}"
+    )
+    
+    return result
+
+
+async def _deepgram_analyze(transcript: str) -> dict:
+    """Call Deepgram's /v1/read endpoint for text intelligence."""
+    api_key = os.getenv("DEEPGRAM_API_KEY")
     if not api_key:
-        logger.warning("OPENAI_API_KEY not set — using fallback analysis")
-        return _fallback_analysis(transcript)
+        logger.warning("DEEPGRAM_API_KEY not set — skipping Deepgram analysis")
+        return {}
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
+                "https://api.deepgram.com/v1/read",
+                params={
+                    "summarize": "v2",
+                    "sentiment": "true",
+                    "topics": "true",
+                    "intents": "true",
+                    "language": "en",
                 },
-                json={
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are analyzing elder care conversations. Return ONLY valid JSON, no markdown."
-                        },
-                        {
-                            "role": "user",
-                            "content": ANALYSIS_PROMPT.format(transcript=transcript)
-                        }
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 1000
-                }
+                headers={
+                    "Authorization": f"Token {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"text": transcript},
             )
             response.raise_for_status()
-            
             data = response.json()
-            content = data["choices"][0]["message"]["content"].strip()
             
-            # Strip markdown code fences if present
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
+            results = data.get("results", {})
             
-            analysis = json.loads(content)
-            logger.info(f"[LLM_ANALYSIS] mood={analysis.get('mood')}, "
-                       f"topics={analysis.get('topics')}, "
-                       f"safety_flags={len(analysis.get('safety_flags', []))}")
+            # Extract summary
+            summary_info = results.get("summary") or {}
+            summary = summary_info.get("text", "")
             
-            # Also run keyword safety scan (catches things LLM might miss)
-            keyword_flags = _scan_safety_keywords(transcript)
-            if keyword_flags:
-                existing = analysis.get("safety_flags", [])
-                analysis["safety_flags"] = list(set(existing + keyword_flags))
-                logger.warning(f"[SAFETY_KEYWORDS] Found {len(keyword_flags)} safety keyword matches")
+            # Extract topics
+            topics_data = results.get("topics", {}).get("segments", [])
+            topics = []
+            for seg in topics_data:
+                for topic in seg.get("topics", []):
+                    t = topic.get("topic", "")
+                    if t and t not in topics:
+                        topics.append(t)
             
-            return analysis
+            # Extract sentiment
+            sentiments_data = results.get("sentiments", {}).get("average", {})
+            sentiment = sentiments_data.get("sentiment", "neutral")
+            sentiment_score = sentiments_data.get("sentiment_score", 0)
             
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON: {e}")
-        return _fallback_analysis(transcript)
+            # Extract intents
+            intents_data = results.get("intents", {}).get("segments", [])
+            intents = []
+            for seg in intents_data:
+                for intent in seg.get("intents", []):
+                    i = intent.get("intent", "")
+                    if i and i not in intents:
+                        intents.append(i)
+            
+            logger.info(
+                f"[DEEPGRAM_INTEL] summary_len={len(summary)}, "
+                f"topics={len(topics)}, sentiment={sentiment}({sentiment_score:.2f}), "
+                f"intents={len(intents)}"
+            )
+            
+            return {
+                "summary": summary,
+                "topics": topics,
+                "sentiment": sentiment,
+                "sentiment_score": sentiment_score,
+                "intents": intents,
+            }
+            
     except Exception as e:
-        logger.error(f"LLM analysis failed: {e}")
-        return _fallback_analysis(transcript)
+        logger.error(f"Deepgram text intelligence failed: {e}")
+        return {}
 
 
-def _scan_safety_keywords(transcript: str) -> list[str]:
-    """Scan transcript for critical safety keywords. Returns list of matched phrases."""
-    text_lower = transcript.lower()
-    flags = []
-    for keyword in SAFETY_KEYWORDS:
-        if keyword in text_lower:
-            # Find the surrounding context
-            idx = text_lower.index(keyword)
-            start = max(0, idx - 40)
-            end = min(len(transcript), idx + len(keyword) + 40)
-            context = transcript[start:end].strip()
-            flags.append(f"Safety keyword '{keyword}' found: \"{context}\"")
-    return flags
-
-
-def _fallback_analysis(transcript: str) -> dict:
+def _elder_care_analysis(transcript: str) -> dict:
     """
-    Fallback analysis when OpenAI is unavailable.
-    Uses keyword matching for basic extraction.
+    Elder-care-specific keyword analysis for signals Deepgram
+    doesn't natively detect (safety, meds, loneliness, connection).
     """
-    lines = transcript.split("\n")
-    patient_msgs = []
-    clara_msgs = []
+    patient_text = _extract_patient_text(transcript)
+    patient_lower = patient_text.lower()
     
-    for line in lines:
-        line = line.strip()
-        if line.startswith("Patient:"):
-            patient_msgs.append(line.split(":", 1)[1].strip())
-        elif line.startswith("Clara:"):
-            clara_msgs.append(line.split(":", 1)[1].strip())
-    
-    # Basic summary from patient messages
-    if patient_msgs:
-        # Get unique patient topics (first 3 non-trivial messages)
-        meaningful = [m for m in patient_msgs if len(m) > 10][:3]
-        summary = "Patient discussed: " + ". ".join(meaningful) if meaningful else "Brief check-in call."
-    else:
-        summary = "Brief check-in call."
-    
-    # Mood from keywords
-    all_patient_text = " ".join(patient_msgs).lower()
-    mood = "neutral"
-    
-    # Safety check first — highest priority
+    # Safety flags
     safety_flags = _scan_safety_keywords(transcript)
+    
+    # Loneliness indicators
+    loneliness = []
+    for keyword in LONELINESS_KEYWORDS:
+        if keyword in patient_lower:
+            idx = patient_lower.index(keyword)
+            start = max(0, idx - 30)
+            end = min(len(patient_text), idx + len(keyword) + 50)
+            context = patient_text[start:end].strip()
+            loneliness.append(context)
+    
+    # Desire to connect
+    desire_to_connect = False
+    connection_context = ""
+    for pattern in CONNECTION_PHRASES:
+        match = re.search(pattern, patient_lower)
+        if match:
+            desire_to_connect = True
+            idx = match.start()
+            start = max(0, idx - 20)
+            end = min(len(patient_text), match.end() + 40)
+            connection_context = patient_text[start:end].strip()
+            break
+    
+    # Medication tracking
+    medication_status = _extract_medication_status(transcript)
+    
+    # Action items from conversation
+    action_items = []
+    if medication_status.get("medications_mentioned"):
+        missed = [m["name"] for m in medication_status["medications_mentioned"] if m.get("taken") is False]
+        if missed:
+            action_items.append(f"Missed medication: {', '.join(missed)}")
+    if desire_to_connect:
+        action_items.append(f"Wants family connection: {connection_context}")
+    if loneliness:
+        action_items.append("Expressed feelings of loneliness")
+    
+    return {
+        "safety_flags": safety_flags,
+        "loneliness_indicators": loneliness,
+        "desire_to_connect": desire_to_connect,
+        "connection_context": connection_context,
+        "medication_status": medication_status,
+        "action_items": action_items,
+    }
+
+
+def _merge_analysis(dg: dict, care: dict, transcript: str) -> dict:
+    """Merge Deepgram intelligence with elder-care analysis into unified result."""
+    
+    # Summary: prefer Deepgram, fall back to basic extraction
+    summary = dg.get("summary", "")
+    if not summary:
+        patient_text = _extract_patient_text(transcript)
+        meaningful = [m.strip() for m in patient_text.split(".") if len(m.strip()) > 10][:3]
+        summary = ". ".join(meaningful) + "." if meaningful else "Brief check-in call."
+    
+    # Mood: map Deepgram sentiment to our mood categories, override if safety/loneliness
+    safety_flags = care.get("safety_flags", [])
+    loneliness = care.get("loneliness_indicators", [])
+    
     if safety_flags:
         mood = "distressed"
-    elif any(w in all_patient_text for w in ["lonely", "alone", "miss", "sad", "no one"]):
+        mood_explanation = f"Safety concerns detected: {safety_flags[0][:80]}"
+    elif loneliness:
         mood = "sad"
-    elif any(w in all_patient_text for w in ["happy", "wonderful", "great", "love"]):
-        mood = "happy"
-    elif any(w in all_patient_text for w in ["confused", "forget", "forgot"]):
-        mood = "confused"
+        mood_explanation = f"Loneliness expressed: {loneliness[0][:80]}"
+    else:
+        dg_sentiment = dg.get("sentiment", "neutral")
+        mood_map = {
+            "positive": "happy",
+            "negative": "sad", 
+            "neutral": "neutral",
+        }
+        mood = mood_map.get(dg_sentiment, "neutral")
+        score = dg.get("sentiment_score", 0)
+        mood_explanation = f"Overall sentiment: {dg_sentiment} (score: {score:.2f})"
+    
+    # Topics: merge Deepgram topics with our detected signals
+    topics = dg.get("topics", [])
+    if loneliness and "loneliness" not in [t.lower() for t in topics]:
+        topics.append("loneliness")
+    if care.get("desire_to_connect") and "family" not in [t.lower() for t in topics]:
+        topics.append("family connection")
+    if care.get("medication_status", {}).get("discussed"):
+        if "medication" not in [t.lower() for t in topics]:
+            topics.append("medication")
+    
+    # Engagement level from transcript length
+    patient_text = _extract_patient_text(transcript)
+    word_count = len(patient_text.split())
+    if word_count > 100:
+        engagement = "high"
+    elif word_count > 40:
+        engagement = "medium"
+    else:
+        engagement = "low"
     
     return {
         "summary": summary,
         "mood": mood,
-        "mood_explanation": "Inferred from keyword analysis (LLM unavailable)",
-        "topics": [],
-        "action_items": [],
-        "medication_status": {"discussed": False, "medications_mentioned": [], "notes": ""},
+        "mood_explanation": mood_explanation,
+        "topics": topics,
+        "action_items": care.get("action_items", []),
+        "medication_status": care.get("medication_status", {"discussed": False, "medications_mentioned": [], "notes": ""}),
         "safety_flags": safety_flags,
-        "engagement_level": "medium",
-        "loneliness_indicators": [],
-        "wants_to_talk_about": [],
-        "notable_requests": []
+        "engagement_level": engagement,
+        "loneliness_indicators": loneliness,
+        "wants_to_talk_about": topics[:5],
+        "notable_requests": care.get("action_items", []),
+        "desire_to_connect": care.get("desire_to_connect", False),
+        "connection_context": care.get("connection_context", ""),
+    }
+
+
+# ─── Helpers ────────────────────────────────────────────────────────────────────
+
+def _extract_patient_text(transcript: str) -> str:
+    """Extract all patient-side utterances from transcript."""
+    lines = transcript.split("\n")
+    patient_msgs = []
+    for line in lines:
+        line = line.strip()
+        if line.startswith("Patient:"):
+            patient_msgs.append(line.split(":", 1)[1].strip())
+    return " ".join(patient_msgs)
+
+
+def _scan_safety_keywords(transcript: str) -> list[str]:
+    """Scan transcript for critical safety keywords."""
+    text_lower = transcript.lower()
+    flags = []
+    for keyword in SAFETY_KEYWORDS:
+        if keyword in text_lower:
+            idx = text_lower.index(keyword)
+            start = max(0, idx - 40)
+            end = min(len(transcript), idx + len(keyword) + 40)
+            context = transcript[start:end].strip()
+            flags.append(f"Safety keyword '{keyword}': \"{context}\"")
+    return flags
+
+
+def _extract_medication_status(transcript: str) -> dict:
+    """Extract medication mentions and whether they were taken."""
+    text_lower = transcript.lower()
+    meds_mentioned = []
+    discussed = False
+    
+    for med in KNOWN_MEDS:
+        if med in text_lower:
+            discussed = True
+            taken = None
+            # Search in context around the medication mention
+            idx = text_lower.index(med)
+            context_start = max(0, idx - 80)
+            context_end = min(len(text_lower), idx + len(med) + 80)
+            context = text_lower[context_start:context_end]
+            
+            if any(w in context for w in ["took", "taken", "had", "yes", "yeah"]):
+                taken = True
+            if any(w in context for w in ["missed", "forgot", "didn't", "haven't", "not yet"]):
+                taken = False
+            
+            med_name = med.title()
+            meds_mentioned.append({"name": med_name, "taken": taken})
+    
+    notes = ""
+    if meds_mentioned:
+        taken_list = [m["name"] for m in meds_mentioned if m.get("taken") is True]
+        missed_list = [m["name"] for m in meds_mentioned if m.get("taken") is False]
+        if taken_list:
+            notes += f"Took: {', '.join(taken_list)}. "
+        if missed_list:
+            notes += f"Missed: {', '.join(missed_list)}. "
+    
+    return {
+        "discussed": discussed,
+        "medications_mentioned": meds_mentioned,
+        "notes": notes.strip(),
     }

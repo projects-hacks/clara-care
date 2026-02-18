@@ -275,9 +275,10 @@ class TwilioCallSession:
                     f"safety_flags={len(analysis.get('safety_flags', []))}"
                 )
                 
-                # ── Safety Alert Auto-Generation ────────────────────────────
+                # ── Safety + Connection Alert Auto-Generation ─────────────────
                 safety_flags = analysis.get("safety_flags", [])
-                if safety_flags:
+                desire_to_connect = analysis.get("desire_to_connect", False)
+                if safety_flags or desire_to_connect:
                     await self._create_safety_alerts(safety_flags, analysis)
                 
                 # ── Save via cognitive pipeline ─────────────────────────────

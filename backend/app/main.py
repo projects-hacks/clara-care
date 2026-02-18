@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI):
     baseline_tracker = BaselineTracker(data_store)
     
     # Notification service
-    notification_service = EmailNotifier()
+    notification_service = EmailNotifier(data_store=data_store)
     
     # Alert engine
     alert_engine = AlertEngine(data_store, notification_service)
