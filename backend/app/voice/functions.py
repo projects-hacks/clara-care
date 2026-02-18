@@ -83,21 +83,36 @@ class FunctionHandler:
                         patient_id=patient_id, 
                         limit=5
                     )
+                    prefs = patient.get("preferences", {})
                     return {
                         "success": True,
                         "patient": {
                             "name": patient.get("name"),
+                            "preferred_name": patient.get("preferred_name"),
                             "age": patient.get("age"),
+                            "birth_year": patient.get("birth_year"),
                             "location": patient.get("location"),
+                            "medical_notes": patient.get("medical_notes"),
                         },
                         "recent_conversations": [
                             {
                                 "date": c.get("timestamp"),
-                                "summary": c.get("summary", "")
+                                "summary": c.get("summary", ""),
+                                "detected_mood": c.get("detected_mood", "")
                             } for c in recent_convos
                         ],
                         "medications": patient.get("medications", []),
-                        "preferences": patient.get("preferences", {})
+                        "preferences": {
+                            "favorite_topics": prefs.get("favorite_topics", []),
+                            "interests": prefs.get("interests", []),
+                            "communication_style": prefs.get("communication_style", ""),
+                            "topics_to_avoid": prefs.get("topics_to_avoid", []),
+                        },
+                        "family_contacts": [
+                            {"name": fc.get("name"), "relationship": fc.get("relationship")}
+                            for fc in (patient.get("family_contacts") or [])
+                        ],
+                        "cognitive_thresholds": patient.get("cognitive_thresholds", {})
                     }
             except Exception as e:
                 logger.warning(f"Could not get patient from data store: {e}")

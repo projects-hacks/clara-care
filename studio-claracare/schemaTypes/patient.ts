@@ -56,6 +56,32 @@ export const patient = defineType({
         }),
       ],
     }),
+    // Phone & Call Schedule  
+    defineField({
+      name: 'phoneNumber',
+      title: 'Phone Number',
+      type: 'string',
+      description: 'Patient phone number (E.164 format, e.g., +14155551234)',
+    }),
+    defineField({
+      name: 'callSchedule',
+      title: 'Call Schedule',
+      type: 'object',
+      fields: [
+        defineField({
+          name: 'preferredTime',
+          type: 'string',
+          title: 'Preferred Time',
+          description: 'e.g., 10:00 AM',
+        }),
+        defineField({
+          name: 'timezone',
+          type: 'string',
+          title: 'Timezone',
+          description: 'e.g., America/Los_Angeles',
+        }),
+      ],
+    }),
     // Medications (array of objects)
     defineField({
       name: 'medications',
@@ -106,11 +132,17 @@ export const patient = defineType({
         }),
         defineField({
           name: 'communicationStyle',
-          type: 'array',
+          type: 'string',
           title: 'Communication Style',
-          description: 'How they prefer to communicate',
-          of: [{ type: 'string' }],
-          options: { layout: 'tags' },
+          description: 'How they prefer to communicate (e.g., warm and patient)',
+          options: {
+            list: [
+              { title: 'Warm and Patient', value: 'warm and patient' },
+              { title: 'Direct and Clear', value: 'direct and clear' },
+              { title: 'Gentle and Encouraging', value: 'gentle and encouraging' },
+              { title: 'Cheerful and Energetic', value: 'cheerful and energetic' },
+            ],
+          },
         }),
         defineField({
           name: 'interests',
@@ -120,7 +152,22 @@ export const patient = defineType({
           of: [{ type: 'string' }],
           options: { layout: 'tags' },
         }),
+        defineField({
+          name: 'topicsToAvoid',
+          type: 'array',
+          title: 'Topics to Avoid',
+          description: 'Sensitive topics Clara should not bring up',
+          of: [{ type: 'string' }],
+          options: { layout: 'tags' },
+        }),
       ],
+    }),
+    // Medical notes
+    defineField({
+      name: 'medicalNotes',
+      title: 'Medical Notes',
+      type: 'text',
+      description: 'Health context for Clara to be aware of during calls',
     }),
     // Cognitive thresholds (nested object with defaults)
     defineField({

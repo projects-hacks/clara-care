@@ -29,6 +29,30 @@ export const wellnessDigest = defineType({
       description: 'Conversation this digest is based on',
     }),
     defineField({
+      name: 'overallMood',
+      title: 'Overall Mood',
+      type: 'string',
+      description: 'Detected mood from the conversation',
+      options: {
+        list: [
+          { title: 'Happy', value: 'happy' },
+          { title: 'Neutral', value: 'neutral' },
+          { title: 'Sad', value: 'sad' },
+          { title: 'Confused', value: 'confused' },
+          { title: 'Distressed', value: 'distressed' },
+          { title: 'Nostalgic', value: 'nostalgic' },
+        ],
+        layout: 'dropdown',
+      },
+    }),
+    defineField({
+      name: 'highlights',
+      title: 'Highlights',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Key highlights from the conversation',
+    }),
+    defineField({
       name: 'cognitiveScore',
       title: 'Cognitive Score',
       type: 'number',
@@ -57,7 +81,8 @@ export const wellnessDigest = defineType({
     defineField({
       name: 'recommendations',
       title: 'Recommendations',
-      type: 'text',
+      type: 'array',
+      of: [{ type: 'string' }],
       description: 'Suggested actions for family',
     }),
     defineField({

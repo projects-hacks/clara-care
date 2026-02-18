@@ -12,7 +12,7 @@ from typing import Optional, Callable, Dict, Any
 import websockets
 from websockets.client import WebSocketClientProtocol
 
-from .persona import get_system_prompt, get_function_definitions
+from .persona import get_system_prompt, get_function_definitions, build_patient_context_prompt
 from .functions import FunctionHandler
 
 logger = logging.getLogger(__name__)
@@ -24,12 +24,13 @@ class DeepgramVoiceAgent:
     Handles audio streaming and function calls
     """
     
-    def __init__(self, patient_id: str, cognitive_pipeline=None):
+    def __init__(self, patient_id: str, cognitive_pipeline=None, data_store=None):
         self.patient_id = patient_id
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
         self.deepgram_ws: Optional[WebSocketClientProtocol] = None
         self.is_connected = False
         self.function_handler = FunctionHandler(patient_id, cognitive_pipeline)
+        self.data_store = data_store
         self._listen_task: Optional[asyncio.Task] = None
         
         # Callbacks for audio output
@@ -59,6 +60,9 @@ class DeepgramVoiceAgent:
             
             # Send initial configuration
             await self._send_config()
+            
+            # Inject patient-specific context so Clara knows who she's talking to
+            await self._inject_patient_context()
             
             self.is_connected = True
             logger.info("Successfully connected to Deepgram Voice Agent")
@@ -109,6 +113,51 @@ class DeepgramVoiceAgent:
         
         await self.deepgram_ws.send(json.dumps(config))
         logger.info("Sent configuration to Deepgram")
+    
+    async def _inject_patient_context(self):
+        """
+        Fetch patient data and inject it as a context message into Deepgram
+        so Clara begins the conversation already personalized.
+        """
+        try:
+            data_store = self.data_store
+            if not data_store:
+                # Try to get from function handler's cognitive pipeline
+                if (self.function_handler and 
+                    self.function_handler.cognitive_pipeline and 
+                    self.function_handler.cognitive_pipeline.data_store):
+                    data_store = self.function_handler.cognitive_pipeline.data_store
+            
+            if not data_store:
+                logger.warning("No data store available — skipping patient context injection")
+                return
+            
+            patient = await data_store.get_patient(self.patient_id)
+            if not patient:
+                logger.warning(f"Patient {self.patient_id} not found — skipping context injection")
+                return
+            
+            recent_convos = await data_store.get_conversations(
+                patient_id=self.patient_id, limit=3
+            )
+            
+            context_text = build_patient_context_prompt(patient, recent_convos)
+            
+            # Deepgram InjectAgentMessage feeds text directly into the LLM context
+            inject_msg = {
+                "type": "InjectAgentMessage",
+                "message": context_text
+            }
+            
+            await self.deepgram_ws.send(json.dumps(inject_msg))
+            logger.info(
+                f"Injected patient context for {patient.get('preferred_name', patient.get('name', self.patient_id))} "
+                f"({len(context_text)} chars, {len(recent_convos)} recent convos)"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error injecting patient context: {e}")
+            # Non-fatal — Clara will fall back to calling get_patient_context
     
     async def _listen_to_deepgram(self):
         """
@@ -195,10 +244,11 @@ class DeepgramVoiceAgent:
             result = await self.function_handler.execute(function_name, input_data)
             
             # Send result back to Deepgram
+            # Deepgram expects output as a JSON *string*, not a nested object
             response = {
                 "type": "FunctionCallResponse",
                 "function_call_id": function_call_id,
-                "output": result
+                "output": json.dumps(result)
             }
             
             await self.deepgram_ws.send(json.dumps(response))
@@ -211,10 +261,10 @@ class DeepgramVoiceAgent:
             error_response = {
                 "type": "FunctionCallResponse",
                 "function_call_id": function_call_id,
-                "output": {
+                "output": json.dumps({
                     "error": str(e),
                     "success": False
-                }
+                })
             }
             
             await self.deepgram_ws.send(json.dumps(error_response))
@@ -285,7 +335,7 @@ class AgentSessionManager:
     def __init__(self):
         self.sessions: Dict[str, DeepgramVoiceAgent] = {}
     
-    async def create_session(self, session_id: str, patient_id: str, cognitive_pipeline=None) -> DeepgramVoiceAgent:
+    async def create_session(self, session_id: str, patient_id: str, cognitive_pipeline=None, data_store=None) -> DeepgramVoiceAgent:
         """
         Create a new agent session
         
@@ -293,6 +343,7 @@ class AgentSessionManager:
             session_id: Unique identifier for this call (e.g., Twilio CallSid)
             patient_id: Patient identifier
             cognitive_pipeline: Optional cognitive pipeline for real-time analysis
+            data_store: Optional data store for fetching patient context
             
         Returns:
             DeepgramVoiceAgent instance
@@ -301,7 +352,11 @@ class AgentSessionManager:
             logger.warning(f"Session {session_id} already exists, closing old session")
             await self.close_session(session_id)
         
-        agent = DeepgramVoiceAgent(patient_id, cognitive_pipeline)
+        # Try to get data_store from cognitive pipeline if not provided
+        if not data_store and cognitive_pipeline and hasattr(cognitive_pipeline, 'data_store'):
+            data_store = cognitive_pipeline.data_store
+        
+        agent = DeepgramVoiceAgent(patient_id, cognitive_pipeline, data_store)
         connected = await agent.connect()
         
         if connected:

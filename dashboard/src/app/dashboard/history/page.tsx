@@ -11,7 +11,7 @@ import { getConversations, getPatientId } from '@/lib/api'
 import type { Conversation } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-const MOOD_FILTERS = ['All', 'Happy', 'Nostalgic', 'Neutral', 'Sad'] as const
+const MOOD_FILTERS = ['All', 'Happy', 'Nostalgic', 'Neutral', 'Sad', 'Confused', 'Distressed'] as const
 
 export default function HistoryPage() {
   const router = useRouter()
@@ -38,8 +38,8 @@ export default function HistoryPage() {
     activeFilter === 'All'
       ? conversations
       : conversations.filter(
-          (c) => c.detected_mood.toLowerCase() === activeFilter.toLowerCase()
-        )
+        (c) => c.detected_mood.toLowerCase() === activeFilter.toLowerCase()
+      )
 
   return (
     <>
@@ -90,7 +90,7 @@ export default function HistoryPage() {
               <ConversationCard
                 key={c.id}
                 conversation={c}
-                onClick={() => router.push(`/history/${c.id}`)}
+                onClick={() => router.push(`/dashboard/history/${c.id}`)}
               />
             ))}
           </div>

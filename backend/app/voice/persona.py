@@ -209,3 +209,83 @@ def get_system_prompt() -> str:
 def get_function_definitions() -> list:
     """Returns all function definitions for Deepgram"""
     return FUNCTION_DEFINITIONS
+
+
+def build_patient_context_prompt(patient: dict, recent_conversations: list | None = None) -> str:
+    """
+    Build a patient-specific context prompt to inject into Deepgram
+    so Clara begins the call with full knowledge of who she's speaking with.
+    
+    Args:
+        patient: Full patient record from data store
+        recent_conversations: Last few conversations with summaries
+        
+    Returns:
+        Formatted context string for Deepgram InjectAgentMessage
+    """
+    preferred = patient.get("preferred_name") or patient.get("name") or "friend"
+    name = patient.get("name") or "Friend"
+    age = patient.get("age") or ""
+    location = patient.get("location") or ""
+    birth_year = patient.get("birth_year")
+    medical_notes = patient.get("medical_notes") or ""
+
+    prefs = patient.get("preferences") or {}
+    fav_topics = prefs.get("favorite_topics") or []
+    interests = prefs.get("interests") or []
+    topics_to_avoid = prefs.get("topics_to_avoid") or []
+    comm_style = prefs.get("communication_style") or "warm and patient"
+
+    medications = patient.get("medications") or []
+    family_contacts = patient.get("family_contacts") or []
+
+    lines = [
+        f"PATIENT CONTEXT — use this to personalize the call:",
+        f"- Name: {name} (call them \"{preferred}\")",
+    ]
+
+    if age:
+        lines.append(f"- Age: {age}")
+    if location:
+        loc_str = f"{location.get('city', '')}, {location.get('state', '')}" if isinstance(location, dict) else str(location)
+        lines.append(f"- Location: {loc_str}")
+    if birth_year:
+        lines.append(f"- Birth year: {birth_year} (golden years: {birth_year + 15}–{birth_year + 25})")
+
+    lines.append(f"- Communication style: {comm_style}")
+
+    if fav_topics:
+        lines.append(f"- Favorite topics: {', '.join(fav_topics)}")
+    if interests:
+        lines.append(f"- Interests: {', '.join(interests)}")
+    if topics_to_avoid:
+        lines.append(f"- ⚠️ TOPICS TO AVOID: {', '.join(topics_to_avoid)}")
+
+    if medications:
+        med_strs = []
+        for m in medications:
+            entry = m.get("name", "medication")
+            if m.get("dosage"):
+                entry += f" ({m['dosage']})"
+            if m.get("schedule"):
+                entry += f" — {m['schedule']}"
+            med_strs.append(entry)
+        lines.append(f"- Medications: {'; '.join(med_strs)}")
+
+    if medical_notes:
+        lines.append(f"- Medical notes: {medical_notes}")
+
+    if family_contacts:
+        contact_names = [f"{fc.get('name', 'contact')} ({fc.get('relationship', '')})" for fc in family_contacts[:3]]
+        lines.append(f"- Family: {', '.join(contact_names)}")
+
+    if recent_conversations:
+        lines.append("- Recent conversations:")
+        for conv in recent_conversations[:3]:
+            date_str = conv.get("timestamp", conv.get("date", ""))[:10]
+            summary = conv.get("summary", "No summary")
+            mood = conv.get("detected_mood", "")
+            mood_str = f" [{mood}]" if mood else ""
+            lines.append(f"  • {date_str}{mood_str}: {summary}")
+
+    return "\n".join(lines)

@@ -119,6 +119,24 @@ class SanityDataStore:
                 "preferred_time": call_sched.get("preferredTime"),
                 "timezone": call_sched.get("timezone"),
             }
+        # Family contacts
+        raw_contacts = doc.get("familyContacts", [])
+        if raw_contacts:
+            result["family_contacts"] = [
+                {
+                    "id": fc.get("_key", fc.get("id", "")),
+                    "name": fc.get("name", ""),
+                    "email": fc.get("email", ""),
+                    "phone": fc.get("phone", ""),
+                    "relationship": fc.get("relationship", ""),
+                    "notification_preferences": {
+                        "daily_digest": fc.get("notificationPreferences", {}).get("dailyDigest", False),
+                        "instant_alerts": fc.get("notificationPreferences", {}).get("instantAlerts", False),
+                        "weekly_report": fc.get("notificationPreferences", {}).get("weeklyReport", False),
+                    },
+                }
+                for fc in raw_contacts
+            ]
         return result
 
     @staticmethod
@@ -176,6 +194,7 @@ class SanityDataStore:
             "acknowledged": doc.get("acknowledged", False),
             "acknowledged_at": doc.get("acknowledgedAt"),
             "acknowledged_by": acked_by,
+            "conversation_id": self._ref_id(doc.get("conversation")),
         }
 
     def _map_digest(self, doc: dict | None) -> dict | None:
@@ -273,6 +292,27 @@ class SanityDataStore:
                     "preferredTime": cs.get("preferred_time"),
                     "timezone": cs.get("timezone"),
                 }
+            if "medications" in updates:
+                sanity_set["medications"] = [
+                    {"name": m.get("name", ""), "dosage": m.get("dosage", ""), "schedule": m.get("schedule", "")}
+                    for m in updates["medications"]
+                ]
+            if "family_contacts" in updates:
+                sanity_set["familyContacts"] = [
+                    {
+                        "_key": fc.get("id", f"fc-{i}"),
+                        "name": fc.get("name", ""),
+                        "email": fc.get("email", ""),
+                        "phone": fc.get("phone", ""),
+                        "relationship": fc.get("relationship", ""),
+                        "notificationPreferences": {
+                            "dailyDigest": fc.get("notification_preferences", {}).get("daily_digest", False),
+                            "instantAlerts": fc.get("notification_preferences", {}).get("instant_alerts", False),
+                            "weeklyReport": fc.get("notification_preferences", {}).get("weekly_report", False),
+                        },
+                    }
+                    for i, fc in enumerate(updates["family_contacts"])
+                ]
             # Pass through any other top-level keys
             simple_map = {
                 "name": "name",
@@ -589,14 +629,13 @@ class SanityDataStore:
                     "repetition_rate": cm.get("repetitionRate"),
                     "word_finding_pauses": cm.get("wordFindingPauses"),
                 }
-                ts = conv.get("timestamp", "")
-                date_str = ts[:10] if len(ts) >= 10 else ts
                 trends.append({
-                    "date": date_str,
+                    "timestamp": conv.get("timestamp", ""),
                     "vocabulary_diversity": metrics_dict["vocabulary_diversity"],
                     "topic_coherence": metrics_dict["topic_coherence"],
                     "repetition_rate": metrics_dict["repetition_rate"],
                     "word_finding_pauses": metrics_dict["word_finding_pauses"],
+                    "response_latency": cm.get("responseLatency"),
                     "cognitive_score": calculate_cognitive_score(metrics_dict),
                 })
             return trends

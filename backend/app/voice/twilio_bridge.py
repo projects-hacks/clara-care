@@ -102,6 +102,7 @@ class TwilioCallSession:
         
         self.is_active = False
         self.conversation_transcript: list = []
+        self.conversation_saved = False  # Track if AI already saved via function call
         self.call_start_time: Optional[datetime] = None
         
     async def start(self) -> bool:
@@ -248,8 +249,9 @@ class TwilioCallSession:
         )
         
         # Save conversation transcript before cleanup
+        # Only do this if the AI didn't already save via save_conversation function call
         pipeline_result = None
-        if self.conversation_transcript and self.deepgram_agent:
+        if self.conversation_transcript and self.deepgram_agent and not self.conversation_saved:
             try:
                 transcript_text = "\n".join(
                     f"{t['speaker']}: {t['text']}" 
@@ -258,17 +260,19 @@ class TwilioCallSession:
                 
                 logger.info(
                     f"[TRANSCRIPT_SAVE] CallSid={self.call_sid} "
-                    f"transcript_length={len(transcript_text)} chars"
+                    f"transcript_length={len(transcript_text)} chars (fallback save)"
                 )
                 
+                # Let the cognitive pipeline determine mood and generate summary
+                # from the actual transcript instead of hardcoding "neutral"
                 pipeline_result = await self.deepgram_agent.function_handler.execute(
                     "save_conversation",
                     {
                         "patient_id": self.patient_id,
                         "transcript": transcript_text,
                         "duration": call_duration_sec or len(self.conversation_transcript) * 5,
-                        "summary": f"Call with {total_turns} exchanges over {call_duration_sec}s",
-                        "detected_mood": "neutral"
+                        "summary": self._generate_summary(),
+                        "detected_mood": self._infer_mood_from_transcript()
                     }
                 )
                 
@@ -300,8 +304,65 @@ class TwilioCallSession:
         
         logger.info(
             f"[CALL_END] CallSid={self.call_sid} duration={call_duration_sec}s "
-            f"turns={total_turns} pipeline={'success' if pipeline_result and pipeline_result.get('success') else 'failed'}"
+            f"turns={total_turns} pipeline={'success' if pipeline_result and pipeline_result.get('success') else 'skipped' if self.conversation_saved else 'failed'}"
         )
+    
+    def _generate_summary(self) -> str:
+        """Generate a basic summary from the transcript when the AI didn't provide one."""
+        if not self.conversation_transcript:
+            return "Brief check-in call."
+        
+        total = len(self.conversation_transcript)
+        patient_msgs = [t["text"] for t in self.conversation_transcript 
+                       if t.get("speaker", "").lower() != "clara" and t.get("text")]
+        
+        if not patient_msgs:
+            return f"Call with {total} exchanges."
+        
+        # Use first and last patient messages to create a rough summary
+        first_msg = patient_msgs[0][:80]
+        summary = f"Patient discussed: {first_msg}"
+        if len(patient_msgs) > 2:
+            summary += f" ({len(patient_msgs)} responses total)"
+        return summary
+    
+    def _infer_mood_from_transcript(self) -> str:
+        """Infer mood from transcript keywords when AI didn't detect mood."""
+        if not self.conversation_transcript:
+            return "neutral"
+        
+        patient_text = " ".join(
+            t["text"].lower() for t in self.conversation_transcript
+            if t.get("speaker", "").lower() != "clara" and t.get("text")
+        )
+        
+        if not patient_text:
+            return "neutral"
+        
+        # Simple keyword-based mood inference
+        distress_words = ["help", "pain", "hurt", "scared", "afraid", "emergency", "fell", "fall"]
+        sad_words = ["lonely", "miss", "sad", "alone", "cry", "depressed", "tired"]
+        confused_words = ["confused", "forget", "forgot", "don't remember", "where am i", "lost"]
+        happy_words = ["wonderful", "great", "happy", "love", "enjoyed", "beautiful", "fantastic"]
+        nostalgic_words = ["remember when", "old days", "used to", "back then", "years ago"]
+        
+        for word in distress_words:
+            if word in patient_text:
+                return "distressed"
+        for word in confused_words:
+            if word in patient_text:
+                return "confused"
+        for word in sad_words:
+            if word in patient_text:
+                return "sad"
+        for word in nostalgic_words:
+            if word in patient_text:
+                return "nostalgic"
+        for word in happy_words:
+            if word in patient_text:
+                return "happy"
+        
+        return "neutral"
 
 
 class TwilioBridge:
