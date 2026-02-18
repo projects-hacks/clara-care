@@ -3,10 +3,11 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['*'],
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'https://api.claracare.me'
     return [
       {
-        source: '/api/:path*',
-        destination: 'http://localhost:3001/api/:path*',
+        source: '/backend-api/:path*',
+        destination: `${backendUrl}/:path*`,
       },
     ]
   },
