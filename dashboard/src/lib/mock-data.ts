@@ -30,7 +30,8 @@ export const mockPatient: Patient = {
     deviation_threshold: 0.20,
     consecutive_trigger: 3,
   },
-  call_schedule: { preferred_time: '09:00', timezone: 'America/Los_Angeles' },
+  call_schedule: { preferred_time: '10:00 AM', timezone: 'America/Los_Angeles' },
+  phone_number: '+14155550199',
   family_contacts: [
     {
       id: 'family-sarah-001',

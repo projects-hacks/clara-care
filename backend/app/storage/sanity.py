@@ -91,7 +91,8 @@ class SanityDataStore:
         if not doc:
             return None
         prefs = doc.get("preferences", {})
-        return {
+        call_sched = doc.get("callSchedule", {})
+        result = {
             "id": doc["_id"],
             "name": doc.get("name"),
             "preferred_name": doc.get("preferredName"),
@@ -101,16 +102,24 @@ class SanityDataStore:
             "location": doc.get("location"),
             "medical_notes": doc.get("medicalNotes"),
             "medications": doc.get("medications", []),
+            "phone_number": doc.get("phoneNumber"),
             "preferences": {
                 "favorite_topics": prefs.get("favoriteTopics", []),
                 "communication_style": prefs.get("communicationStyle", ""),
                 "interests": prefs.get("interests", []),
+                "topics_to_avoid": prefs.get("topicsToAvoid", []),
             },
             "cognitive_thresholds": {
                 "deviation_threshold": doc.get("cognitiveThresholds", {}).get("deviationThreshold", 0.20),
                 "consecutive_trigger": doc.get("cognitiveThresholds", {}).get("consecutiveTrigger", 3),
             },
         }
+        if call_sched:
+            result["call_schedule"] = {
+                "preferred_time": call_sched.get("preferredTime"),
+                "timezone": call_sched.get("timezone"),
+            }
+        return result
 
     @staticmethod
     def _ref_id(ref_field) -> str | None:
@@ -250,6 +259,7 @@ class SanityDataStore:
                     "favoriteTopics": p.get("favorite_topics", []),
                     "communicationStyle": p.get("communication_style", ""),
                     "interests": p.get("interests", []),
+                    "topicsToAvoid": p.get("topics_to_avoid", []),
                 }
             if "cognitive_thresholds" in updates:
                 ct = updates["cognitive_thresholds"]
@@ -257,8 +267,19 @@ class SanityDataStore:
                     "deviationThreshold": ct.get("deviation_threshold", 0.20),
                     "consecutiveTrigger": ct.get("consecutive_trigger", 3),
                 }
+            if "call_schedule" in updates:
+                cs = updates["call_schedule"]
+                sanity_set["callSchedule"] = {
+                    "preferredTime": cs.get("preferred_time"),
+                    "timezone": cs.get("timezone"),
+                }
             # Pass through any other top-level keys
-            simple_map = {"name": "name", "preferred_name": "preferredName", "age": "age"}
+            simple_map = {
+                "name": "name",
+                "preferred_name": "preferredName",
+                "age": "age",
+                "phone_number": "phoneNumber",
+            }
             for py_key, san_key in simple_map.items():
                 if py_key in updates:
                     sanity_set[san_key] = updates[py_key]

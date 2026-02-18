@@ -69,6 +69,11 @@ class InMemoryDataStore:
             "cognitive_thresholds": {
                 "deviation_threshold": 0.20,  # 20%
                 "consecutive_trigger": 3
+            },
+            "phone_number": "+14155550199",
+            "call_schedule": {
+                "preferred_time": "10:00 AM",
+                "timezone": "America/Los_Angeles"
             }
         }
         

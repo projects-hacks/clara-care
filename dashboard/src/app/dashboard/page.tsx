@@ -164,7 +164,7 @@ export default function HomePage() {
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-900">Recent Conversations</h2>
             <Link
-              href="/history"
+              href="/dashboard/history"
               className="flex items-center gap-0.5 text-xs font-medium text-clara-600"
             >
               View All
@@ -176,7 +176,7 @@ export default function HomePage() {
               <ConversationCard
                 key={c.id}
                 conversation={c}
-                onClick={() => router.push(`/history/${c.id}`)}
+                onClick={() => router.push(`/dashboard/history/${c.id}`)}
               />
             ))}
           </div>
@@ -187,7 +187,7 @@ export default function HomePage() {
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-900">Active Alerts</h2>
               <Link
-                href="/alerts"
+                href="/dashboard/alerts"
                 className="flex items-center gap-0.5 text-xs font-medium text-clara-600"
               >
                 View All

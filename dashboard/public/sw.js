@@ -1,7 +1,7 @@
 // ClaraCare Service Worker
 // Provides offline caching for the PWA shell and API responses
 
-const CACHE_NAME = 'claracare-v2'
+const CACHE_NAME = 'claracare-v3'
 
 const PRECACHE_URLS = [
     '/',
