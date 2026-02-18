@@ -48,8 +48,8 @@ class DeepgramVoiceAgent:
             return False
             
         try:
-            # Deepgram Voice Agent WebSocket URL
-            url = "wss://agent.deepgram.com/agent"
+            # Deepgram Voice Agent V1 WebSocket URL
+            url = "wss://agent.deepgram.com/v1/agent/converse"
             
             headers = {
                 "Authorization": f"Token {self.deepgram_api_key}"
@@ -79,9 +79,9 @@ class DeepgramVoiceAgent:
             return False
     
     async def _send_config(self):
-        """Send initial configuration to Deepgram Voice Agent"""
+        """Send initial V1 Settings to Deepgram Voice Agent"""
         config = {
-            "type": "SettingsConfiguration",
+            "type": "Settings",
             "audio": {
                 "input": {
                     "encoding": "mulaw",
@@ -94,25 +94,34 @@ class DeepgramVoiceAgent:
                 }
             },
             "agent": {
+                "language": "en",
                 "listen": {
-                    "model": "nova-3"
+                    "provider": {
+                        "type": "deepgram",
+                        "model": "nova-3"
+                    }
                 },
                 "think": {
                     "provider": {
-                        "type": "open_ai"
+                        "type": "open_ai",
+                        "model": "gpt-4o-mini",
+                        "temperature": 0.7
                     },
-                    "model": "gpt-4o",
-                    "instructions": get_system_prompt(),
+                    "prompt": get_system_prompt(),
                     "functions": get_function_definitions()
                 },
                 "speak": {
-                    "model": "aura-asteria-en"
-                }
+                    "provider": {
+                        "type": "deepgram",
+                        "model": "aura-2-thalia-en"
+                    }
+                },
+                "greeting": "Hello! This is Clara, your care companion. How are you feeling today?"
             }
         }
         
         await self.deepgram_ws.send(json.dumps(config))
-        logger.info("Sent configuration to Deepgram")
+        logger.info("Sent V1 Settings to Deepgram")
     
     async def _inject_patient_context(self):
         """
@@ -143,10 +152,10 @@ class DeepgramVoiceAgent:
             
             context_text = build_patient_context_prompt(patient, recent_convos)
             
-            # Deepgram InjectAgentMessage feeds text directly into the LLM context
+            # Deepgram V1: InjectAgentMessage uses "content" instead of "message"
             inject_msg = {
                 "type": "InjectAgentMessage",
-                "message": context_text
+                "content": context_text
             }
             
             await self.deepgram_ws.send(json.dumps(inject_msg))
@@ -219,55 +228,88 @@ class DeepgramVoiceAgent:
             # Metadata about the agent
             logger.debug(f"Metadata: {message}")
             
+        elif msg_type == "AgentThinking":
+            # V1: Agent is processing internally
+            logger.debug(f"Agent thinking: {message.get('content', '')}")
+            
+        elif msg_type == "AgentAudioDone":
+            # V1: Agent finished sending audio
+            logger.debug("Agent audio done")
+            
+        elif msg_type == "SettingsApplied":
+            logger.info("Deepgram V1 Settings applied successfully")
+            
+        elif msg_type == "Welcome":
+            request_id = message.get("request_id", "")
+            logger.info(f"Deepgram Voice Agent connected, request_id={request_id}")
+            
+        elif msg_type == "Warning":
+            logger.warning(f"Deepgram warning: {message.get('description', '')} (code={message.get('code', '')})")
+            
         elif msg_type == "Error":
-            # Error from Deepgram
-            error_msg = message.get("message", "Unknown error")
-            logger.error(f"Deepgram error: {error_msg}")
+            # V1: Error uses "description" instead of "message"
+            error_msg = message.get("description", message.get("message", "Unknown error"))
+            error_code = message.get("code", "")
+            logger.error(f"Deepgram error: {error_msg} (code={error_code})")
             if self.on_error:
                 await self.on_error(error_msg)
         else:
-            logger.debug(f"Unknown message type: {msg_type}")
+            logger.debug(f"Unhandled message type: {msg_type} — {message}")
     
     async def _handle_function_call(self, message: Dict[str, Any]):
         """
-        Handle function call request from Clara
-        Execute the function and send the result back to Deepgram
+        Handle V1 FunctionCallRequest from Clara.
+        V1 format uses a "functions" array with id/name/arguments/client_side.
         """
-        function_call_id = message.get("function_call_id")
-        function_name = message.get("function_name")
-        input_data = message.get("input", {})
+        functions = message.get("functions", [])
         
-        logger.info(f"[FUNC_CALL] function={function_name} params={input_data}")
-        
-        try:
-            # Execute the function
-            result = await self.function_handler.execute(function_name, input_data)
+        for func in functions:
+            # Only handle client-side functions
+            if not func.get("client_side", True):
+                logger.debug(f"Skipping server-side function: {func.get('name')}")
+                continue
             
-            # Send result back to Deepgram
-            # Deepgram expects output as a JSON *string*, not a nested object
-            response = {
-                "type": "FunctionCallResponse",
-                "function_call_id": function_call_id,
-                "output": json.dumps(result)
-            }
+            func_id = func.get("id")
+            function_name = func.get("name")
+            # V1: arguments is a JSON *string*, not an object
+            raw_args = func.get("arguments", "{}")
+            try:
+                input_data = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except json.JSONDecodeError:
+                input_data = {}
             
-            await self.deepgram_ws.send(json.dumps(response))
-            logger.info(f"[FUNC_RESULT] function={function_name} result_keys={list(result.keys()) if isinstance(result, dict) else 'non-dict'}")
+            logger.info(f"[FUNC_CALL] function={function_name} params={input_data}")
             
-        except Exception as e:
-            logger.error(f"Error executing function {function_name}: {e}")
-            
-            # Send error response
-            error_response = {
-                "type": "FunctionCallResponse",
-                "function_call_id": function_call_id,
-                "output": json.dumps({
-                    "error": str(e),
-                    "success": False
-                })
-            }
-            
-            await self.deepgram_ws.send(json.dumps(error_response))
+            try:
+                # Execute the function
+                result = await self.function_handler.execute(function_name, input_data)
+                
+                # V1 FunctionCallResponse: id, name, content (JSON string)
+                response = {
+                    "type": "FunctionCallResponse",
+                    "id": func_id,
+                    "name": function_name,
+                    "content": json.dumps(result)
+                }
+                
+                await self.deepgram_ws.send(json.dumps(response))
+                logger.info(f"[FUNC_RESULT] function={function_name} result_keys={list(result.keys()) if isinstance(result, dict) else 'non-dict'}")
+                
+            except Exception as e:
+                logger.error(f"Error executing function {function_name}: {e}")
+                
+                # Send error response in V1 format
+                error_response = {
+                    "type": "FunctionCallResponse",
+                    "id": func_id,
+                    "name": function_name,
+                    "content": json.dumps({
+                        "error": str(e),
+                        "success": False
+                    })
+                }
+                
+                await self.deepgram_ws.send(json.dumps(error_response))
     
     async def send_audio(self, audio_data: bytes):
         """

@@ -274,7 +274,9 @@ async def twiml_handler(patient_id: str = "demo-patient"):
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
-        <Stream url="wss://{ws_host}/voice/twilio?patient_id={patient_id}" />
+        <Stream url="wss://{ws_host}/voice/twilio">
+            <Parameter name="patient_id" value="{patient_id}" />
+        </Stream>
     </Connect>
 </Response>'''
     

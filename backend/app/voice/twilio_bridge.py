@@ -415,6 +415,12 @@ class TwilioBridge:
                     await websocket.close()
                     return
                 
+                # Extract patient_id from Twilio <Parameter> (delivered in customParameters)
+                custom_params = start_data.get("customParameters", {})
+                if custom_params.get("patient_id"):
+                    patient_id = custom_params["patient_id"]
+                    logger.info(f"Got patient_id from Twilio customParameters: {patient_id}")
+                
                 # Create call session with cognitive pipeline
                 call_session = TwilioCallSession(
                     twilio_ws=websocket,
