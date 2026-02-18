@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { MessageSquare, Bell, Calendar, Sparkles, ChevronRight } from 'lucide-react'
 import TopBar from '@/components/TopBar'
+import CallButton from '@/components/CallButton'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import CognitiveScoreBadge from '@/components/CognitiveScoreBadge'
 import MoodBadge from '@/components/MoodBadge'
@@ -88,10 +89,10 @@ export default function HomePage() {
   const displayAlerts = unacknowledgedAlerts.slice(0, 2)
   const daysTracked = conversations.length > 0
     ? Math.ceil(
-        (new Date(conversations[0].timestamp).getTime() -
-          new Date(conversations[conversations.length - 1].timestamp).getTime()) /
-          86400000
-      ) + 1
+      (new Date(conversations[0].timestamp).getTime() -
+        new Date(conversations[conversations.length - 1].timestamp).getTime()) /
+      86400000
+    ) + 1
     : 0
 
   return (
@@ -99,6 +100,15 @@ export default function HomePage() {
       <TopBar title="ClaraCare" subtitle={patient?.name ? `Caring for ${patient.preferred_name}` : undefined} />
 
       <main className="space-y-4 px-4 py-4">
+        {/* Call Now Button */}
+        {patient && (
+          <CallButton
+            patientId={patient.id}
+            patientName={patient.preferred_name || patient.name}
+            patientPhone={patient.phone_number}
+          />
+        )}
+
         {digest && (
           <section className="rounded-xl bg-white p-4 shadow-sm" aria-label="Wellness Summary">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Today&apos;s Wellness</h2>
