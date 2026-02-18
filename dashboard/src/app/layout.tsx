@@ -1,14 +1,13 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import Navigation from '@/components/Navigation'
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
   title: 'ClaraCare',
-  description: 'AI Elder Care Companion — Family Dashboard for cognitive health monitoring and daily check-ins.',
+  description: 'AI Elder Care Companion — Cognitive health monitoring and daily check-ins powered by conversational AI.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -39,10 +38,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <div className="mx-auto min-h-screen max-w-md bg-gray-50 pb-20">
-          {children}
-        </div>
-        <Navigation />
+        {children}
         <ServiceWorkerRegistration />
       </body>
     </html>

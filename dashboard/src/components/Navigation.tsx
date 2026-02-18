@@ -6,11 +6,11 @@ import { Home, MessageSquare, TrendingUp, Bell, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const tabs = [
-  { href: '/', label: 'Home', icon: Home },
-  { href: '/history', label: 'History', icon: MessageSquare },
-  { href: '/trends', label: 'Trends', icon: TrendingUp },
-  { href: '/alerts', label: 'Alerts', icon: Bell },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/dashboard', label: 'Home', icon: Home },
+  { href: '/dashboard/history', label: 'History', icon: MessageSquare },
+  { href: '/dashboard/trends', label: 'Trends', icon: TrendingUp },
+  { href: '/dashboard/alerts', label: 'Alerts', icon: Bell },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
 interface NavigationProps {
@@ -24,7 +24,7 @@ export default function Navigation({ unreadAlerts = 0 }: NavigationProps) {
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white safe-bottom">
       <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-1">
         {tabs.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))
+          const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
           return (
             <Link
               key={href}
