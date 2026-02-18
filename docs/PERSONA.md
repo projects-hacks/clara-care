@@ -536,7 +536,7 @@ Perfect! Thank you for taking care of yourself, Dorothy.
 
 ---
 
-## P1's Implementation Checklist
+## Implementation Checklist
 
 - [ ] Create `backend/app/voice/persona.py` with system prompt
 - [ ] Create all 6 function definitions for Deepgram
