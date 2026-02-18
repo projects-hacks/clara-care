@@ -12,7 +12,7 @@ from typing import Optional, Callable, Dict, Any
 import websockets
 from websockets.client import WebSocketClientProtocol
 
-from .persona import get_system_prompt, get_function_definitions, build_patient_context_prompt
+from .persona import get_function_definitions, get_full_prompt, get_personalized_greeting, build_patient_context_prompt
 from .functions import FunctionHandler
 
 logger = logging.getLogger(__name__)
@@ -40,29 +40,50 @@ class DeepgramVoiceAgent:
         
     async def connect(self) -> bool:
         """
-        Establish WebSocket connection to Deepgram Voice Agent API
-        Returns True if successful, False otherwise
+        Establish WebSocket connection to Deepgram Voice Agent API.
+        Fetches patient data first so the prompt + greeting are personalized
+        BEFORE the agent starts speaking (avoids InjectAgentMessage race).
         """
         if not self.deepgram_api_key:
             logger.error("DEEPGRAM_API_KEY not found in environment")
             return False
             
         try:
-            # Deepgram Voice Agent V1 WebSocket URL
-            url = "wss://agent.deepgram.com/v1/agent/converse"
+            # 1. Fetch patient data BEFORE connecting so we can embed it in the prompt
+            patient = None
+            recent_convos = []
+            try:
+                data_store = self.data_store
+                if not data_store and self.function_handler and self.function_handler.cognitive_pipeline:
+                    data_store = self.function_handler.cognitive_pipeline.data_store
+                
+                if data_store:
+                    patient = await data_store.get_patient(self.patient_id)
+                    if patient:
+                        recent_convos = await data_store.get_conversations(
+                            patient_id=self.patient_id, limit=3
+                        )
+                        logger.info(f"Fetched patient context for {patient.get('preferred_name', self.patient_id)} ({len(recent_convos)} recent convos)")
+                    else:
+                        logger.warning(f"Patient {self.patient_id} not found — using generic prompt")
+                else:
+                    logger.warning("No data store available — using generic prompt")
+            except Exception as e:
+                logger.error(f"Error fetching patient data: {e} — using generic prompt")
             
-            headers = {
-                "Authorization": f"Token {self.deepgram_api_key}"
-            }
+            # 2. Build personalized prompt + greeting
+            full_prompt = get_full_prompt(patient, recent_convos)
+            greeting = get_personalized_greeting(patient)
+            
+            # 3. Connect to Deepgram
+            url = "wss://agent.deepgram.com/v1/agent/converse"
+            headers = {"Authorization": f"Token {self.deepgram_api_key}"}
             
             logger.info(f"Connecting to Deepgram Voice Agent for patient {self.patient_id}")
             self.deepgram_ws = await websockets.connect(url, extra_headers=headers)
             
-            # Send initial configuration
-            await self._send_config()
-            
-            # Inject patient-specific context so Clara knows who she's talking to
-            await self._inject_patient_context()
+            # 4. Send Settings with the personalized prompt + greeting baked in
+            await self._send_config(full_prompt, greeting)
             
             self.is_connected = True
             logger.info("Successfully connected to Deepgram Voice Agent")
@@ -78,8 +99,8 @@ class DeepgramVoiceAgent:
                 await self.on_error(f"Connection failed: {str(e)}")
             return False
     
-    async def _send_config(self):
-        """Send initial V1 Settings to Deepgram Voice Agent"""
+    async def _send_config(self, full_prompt: str, greeting: str):
+        """Send V1 Settings to Deepgram with personalized prompt + greeting."""
         config = {
             "type": "Settings",
             "audio": {
@@ -107,7 +128,7 @@ class DeepgramVoiceAgent:
                         "model": "gpt-4o-mini",
                         "temperature": 0.7
                     },
-                    "prompt": get_system_prompt(),
+                    "prompt": full_prompt,
                     "functions": get_function_definitions()
                 },
                 "speak": {
@@ -116,12 +137,12 @@ class DeepgramVoiceAgent:
                         "model": "aura-2-thalia-en"
                     }
                 },
-                "greeting": "Hello! This is Clara, your care companion. How are you feeling today?"
+                "greeting": greeting
             }
         }
         
         await self.deepgram_ws.send(json.dumps(config))
-        logger.info("Sent V1 Settings to Deepgram")
+        logger.info(f"Sent V1 Settings — prompt={len(full_prompt)} chars, greeting='{greeting}'")
     
     async def _inject_patient_context(self):
         """
@@ -221,8 +242,15 @@ class DeepgramVoiceAgent:
             await self._handle_function_call(message)
             
         elif msg_type == "ConversationText":
-            # Full conversation text
-            logger.debug(f"Conversation text: {message.get('text', '')}")
+            # V1: This is how transcripts are delivered — capture them!
+            role = message.get("role", "unknown")
+            content = message.get("content", "")
+            # Map Deepgram roles to our speaker labels
+            speaker = "Clara" if role == "assistant" else "Patient"
+            if content:
+                logger.info(f"ConversationText [{speaker}]: {content}")
+                if self.on_transcript:
+                    await self.on_transcript(speaker, content)
             
         elif msg_type == "Metadata":
             # Metadata about the agent

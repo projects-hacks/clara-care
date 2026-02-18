@@ -147,24 +147,37 @@ class CognitiveAnalyzer:
         """
         Extract only the patient's utterances from transcript
         
-        Assumes format: "Clara: ...\nDorothy: ...\nClara: ..."
+        Matches multiple speaker label formats:
+        - "Dorothy: ..." (patient name)
+        - "Patient: ..." (V1 Deepgram label)
+        - "Emily: ..." (preferred name)
         """
         turns = []
         lines = transcript.split('\n')
         
+        # Build set of labels that identify the patient
+        patient_labels = {"Patient"}
+        if patient_name:
+            patient_labels.add(patient_name)
+            # Also match first name only (e.g. "Emily" from "Emily Chen")
+            first_name = patient_name.split()[0] if ' ' in patient_name else patient_name
+            patient_labels.add(first_name)
+        
         for line in lines:
             line = line.strip()
-            if not line:
+            if not line or ':' not in line:
                 continue
             
-            # Check if line starts with patient name
-            if line.startswith(f"{patient_name}:"):
-                # Extract text after the name
+            # Extract speaker label (everything before first colon)
+            speaker = line.split(':', 1)[0].strip()
+            
+            # Check if this speaker is the patient (case-insensitive)
+            if any(speaker.lower() == label.lower() for label in patient_labels):
                 text = line.split(':', 1)[1].strip()
                 if text:
                     turns.append(text)
         
-        logger.debug(f"Extracted {len(turns)} patient turns from transcript")
+        logger.debug(f"Extracted {len(turns)} patient turns from transcript (labels: {patient_labels})")
         return turns
     
     def compute_vocabulary_diversity(self, patient_turns: list[str]) -> float:

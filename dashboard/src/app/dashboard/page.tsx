@@ -57,10 +57,13 @@ export default function HomePage() {
     loadData()
   }, [])
 
+  const familyId = patient?.family_contacts?.[0]?.id || 'family-member'
+  const familyName = patient?.family_contacts?.[0]?.name || 'Family Member'
+
   const handleAcknowledge = async (id: string) => {
-    await acknowledgeAlert(id, 'Family Member')
+    await acknowledgeAlert(id, familyId)
     setAlerts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, acknowledged: true, acknowledged_by: 'Family Member' } : a))
+      prev.map((a) => (a.id === id ? { ...a, acknowledged: true, acknowledged_by: familyName } : a))
     )
   }
 

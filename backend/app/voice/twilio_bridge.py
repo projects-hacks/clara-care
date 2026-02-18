@@ -226,8 +226,8 @@ class TwilioCallSession:
     
     async def end(self):
         """
-        End the call session
-        Clean up resources and run cognitive pipeline
+        End the call session.
+        Runs LLM post-call analysis, safety detection, cognitive pipeline, and cleanup.
         """
         if not self.is_active:
             return
@@ -249,7 +249,6 @@ class TwilioCallSession:
         )
         
         # Save conversation transcript before cleanup
-        # Only do this if the AI didn't already save via save_conversation function call
         pipeline_result = None
         if self.conversation_transcript and self.deepgram_agent and not self.conversation_saved:
             try:
@@ -260,19 +259,36 @@ class TwilioCallSession:
                 
                 logger.info(
                     f"[TRANSCRIPT_SAVE] CallSid={self.call_sid} "
-                    f"transcript_length={len(transcript_text)} chars (fallback save)"
+                    f"transcript_length={len(transcript_text)} chars"
                 )
                 
-                # Let the cognitive pipeline determine mood and generate summary
-                # from the actual transcript instead of hardcoding "neutral"
+                # ── LLM Post-Call Analysis ──────────────────────────────────
+                from app.cognitive.post_call_analyzer import analyze_transcript
+                
+                analysis = await analyze_transcript(transcript_text)
+                summary = analysis.get("summary", "Check-in call.")
+                detected_mood = analysis.get("mood", "neutral")
+                
+                logger.info(
+                    f"[LLM_ANALYSIS] CallSid={self.call_sid} mood={detected_mood} "
+                    f"topics={analysis.get('topics', [])} "
+                    f"safety_flags={len(analysis.get('safety_flags', []))}"
+                )
+                
+                # ── Safety Alert Auto-Generation ────────────────────────────
+                safety_flags = analysis.get("safety_flags", [])
+                if safety_flags:
+                    await self._create_safety_alerts(safety_flags, analysis)
+                
+                # ── Save via cognitive pipeline ─────────────────────────────
                 pipeline_result = await self.deepgram_agent.function_handler.execute(
                     "save_conversation",
                     {
                         "patient_id": self.patient_id,
                         "transcript": transcript_text,
                         "duration": call_duration_sec or len(self.conversation_transcript) * 5,
-                        "summary": self._generate_summary(),
-                        "detected_mood": self._infer_mood_from_transcript()
+                        "summary": summary,
+                        "detected_mood": detected_mood
                     }
                 )
                 
@@ -307,62 +323,42 @@ class TwilioCallSession:
             f"turns={total_turns} pipeline={'success' if pipeline_result and pipeline_result.get('success') else 'skipped' if self.conversation_saved else 'failed'}"
         )
     
-    def _generate_summary(self) -> str:
-        """Generate a basic summary from the transcript when the AI didn't provide one."""
-        if not self.conversation_transcript:
-            return "Brief check-in call."
-        
-        total = len(self.conversation_transcript)
-        patient_msgs = [t["text"] for t in self.conversation_transcript 
-                       if t.get("speaker", "").lower() != "clara" and t.get("text")]
-        
-        if not patient_msgs:
-            return f"Call with {total} exchanges."
-        
-        # Use first and last patient messages to create a rough summary
-        first_msg = patient_msgs[0][:80]
-        summary = f"Patient discussed: {first_msg}"
-        if len(patient_msgs) > 2:
-            summary += f" ({len(patient_msgs)} responses total)"
-        return summary
-    
-    def _infer_mood_from_transcript(self) -> str:
-        """Infer mood from transcript keywords when AI didn't detect mood."""
-        if not self.conversation_transcript:
-            return "neutral"
-        
-        patient_text = " ".join(
-            t["text"].lower() for t in self.conversation_transcript
-            if t.get("speaker", "").lower() != "clara" and t.get("text")
-        )
-        
-        if not patient_text:
-            return "neutral"
-        
-        # Simple keyword-based mood inference
-        distress_words = ["help", "pain", "hurt", "scared", "afraid", "emergency", "fell", "fall"]
-        sad_words = ["lonely", "miss", "sad", "alone", "cry", "depressed", "tired"]
-        confused_words = ["confused", "forget", "forgot", "don't remember", "where am i", "lost"]
-        happy_words = ["wonderful", "great", "happy", "love", "enjoyed", "beautiful", "fantastic"]
-        nostalgic_words = ["remember when", "old days", "used to", "back then", "years ago"]
-        
-        for word in distress_words:
-            if word in patient_text:
-                return "distressed"
-        for word in confused_words:
-            if word in patient_text:
-                return "confused"
-        for word in sad_words:
-            if word in patient_text:
-                return "sad"
-        for word in nostalgic_words:
-            if word in patient_text:
-                return "nostalgic"
-        for word in happy_words:
-            if word in patient_text:
-                return "happy"
-        
-        return "neutral"
+    async def _create_safety_alerts(self, safety_flags: list, analysis: dict):
+        """
+        Create automatic safety alerts when safety flags are detected.
+        This catches things like suicidal ideation, falls, severe distress.
+        """
+        try:
+            if not (self.deepgram_agent and self.deepgram_agent.function_handler):
+                logger.error("[SAFETY] Cannot create alerts — no function handler")
+                return
+            
+            # Build a concise alert message
+            flag_summary = "; ".join(safety_flags[:3])  # Max 3 flags in message
+            action_items = analysis.get("action_items", [])
+            action_text = " Action needed: " + "; ".join(action_items) if action_items else ""
+            
+            message = f"During today's call, concerning statements were detected: {flag_summary}.{action_text}"
+            
+            logger.warning(
+                f"[SAFETY_ALERT] CallSid={self.call_sid} patient={self.patient_id} "
+                f"flags={len(safety_flags)}: {flag_summary}"
+            )
+            
+            await self.deepgram_agent.function_handler.execute(
+                "trigger_alert",
+                {
+                    "patient_id": self.patient_id,
+                    "severity": "high",
+                    "alert_type": "distress",
+                    "message": message
+                }
+            )
+            
+            logger.info(f"[SAFETY_ALERT_CREATED] CallSid={self.call_sid}")
+            
+        except Exception as e:
+            logger.error(f"[SAFETY_ALERT_FAILED] CallSid={self.call_sid} error={e}")
 
 
 class TwilioBridge:

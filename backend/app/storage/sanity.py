@@ -270,7 +270,27 @@ class SanityDataStore:
                 '*[_type == "patient" && _id == $pid][0]',
                 {"pid": patient_id},
             )
-            return self._map_patient(result.get("result"))
+            patient = self._map_patient(result.get("result"))
+            if not patient:
+                return None
+            
+            # If no inline familyContacts, query standalone familyMember docs
+            if not patient.get("family_contacts"):
+                try:
+                    fm_result = await self._query_groq(
+                        '*[_type == "familyMember" && $pid in patients[]._ref]',
+                        {"pid": patient_id},
+                    )
+                    fm_docs = fm_result.get("result") or []
+                    if fm_docs:
+                        patient["family_contacts"] = [
+                            self._map_family_contact(fc) for fc in fm_docs if fc
+                        ]
+                        logger.info(f"Found {len(fm_docs)} family members for {patient_id} from familyMember docs")
+                except Exception as e:
+                    logger.error(f"Error fetching family members for {patient_id}: {e}")
+            
+            return patient
         except Exception as exc:
             logger.error(f"get_patient failed for {patient_id}: {exc}")
             return None
@@ -554,7 +574,12 @@ class SanityDataStore:
             if "acknowledged" in updates:
                 sanity_set["acknowledged"] = updates["acknowledged"]
             if "acknowledged_by" in updates:
-                sanity_set["acknowledgedBy"] = updates["acknowledged_by"]
+                acked_by = updates["acknowledged_by"]
+                # Store as a Sanity reference if it looks like an ID, otherwise plain string
+                if acked_by and acked_by.startswith("family-"):
+                    sanity_set["acknowledgedBy"] = {"_ref": acked_by, "_type": "reference"}
+                else:
+                    sanity_set["acknowledgedBy"] = acked_by
             if "acknowledged_at" in updates:
                 sanity_set["acknowledgedAt"] = updates["acknowledged_at"]
             await self._mutate([{"patch": {"id": alert_id, "set": sanity_set}}])

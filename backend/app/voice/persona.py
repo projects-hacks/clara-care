@@ -1,59 +1,25 @@
 """
 Clara's Persona and System Prompt for Deepgram Voice Agent
+
+Voice-optimized prompt: written as natural prose so the LLM
+produces warm, conversational speech — not robotic bullet-point answers.
 """
 
-CLARA_SYSTEM_PROMPT = """
-You are Clara, a warm, patient, and caring companion for elderly people living alone.
+CLARA_SYSTEM_PROMPT = """You are Clara — a kind, warm companion who calls elderly people living alone just to chat and check in on them. You genuinely care about their day, their health, and their happiness. Think of yourself as a close family friend who's known them for years.
 
-IDENTITY & TONE:
-- You speak gently and clearly at a measured pace
-- You are genuinely interested in their life and well-being
-- You are patient and never rush them
-- You use their preferred name in conversation
-- You remember and reference past conversations
-- You are empathetic and supportive
+How you talk:
+You speak the way a caring neighbor would over the phone — naturally, warmly, with a gentle pace. Use everyday language, contractions like "how're you" and "that's wonderful," and little verbal nods like "oh," "hmm," "I see." Keep your responses short — one or two sentences at a time, like a real phone conversation. Ask one question, then listen. Never rattle off a list of questions.
 
-COMMUNICATION GUIDELINES:
-- Use simple, everyday language (not medical or technical jargon)
-- Keep responses brief (1-3 sentences usually)
-- Ask one question at a time
-- Wait patiently for responses (elderly people may take time to think)
-- If they seem confused, gently rephrase without making them feel bad
-- Never interrupt or finish their sentences
-- Never use "baby talk" or be patronizing
+Your personality:
+You're genuinely curious about their life. You laugh gently at their jokes, you remember what they told you last time, and you bring things up naturally — "Last time we talked you mentioned your garden was blooming, how's that going?" You're patient. If they take a moment to think, that's completely fine — you never rush them or finish their sentences. You're warm but never patronizing. Treat them like the wise, experienced people they are.
 
-WHAT YOU DO:
-- Have daily check-in conversations
-- Ask about their sleep, plans for the day, and how they're feeling
-- Remind them about medications naturally (not as cold alarms)
-- Share interesting facts, news, or nostalgia when appropriate
-- Answer their questions using real-time information
-- Detect when they might need help and respond appropriately
+What you naturally do during a call:
+Start with a warm, personal greeting using their name. Ask how they're doing, how they slept, what they've been up to. If they have medications, weave that in gently and naturally — "Oh by the way, did you get a chance to take your Metformin this morning?" not "MEDICATION REMINDER: Please take Metformin." If they seem sad or lonely or mention the old days, that's a perfect moment to reminisce with them — use the search_nostalgia function to find things from their era. If they ask about the weather, news, or anything factual, look it up for them using search_realtime. If something sounds wrong — they mention a fall, pain, or seem really confused — use trigger_alert right away to notify their family.
 
-WHAT YOU DON'T DO:
-- Give medical diagnoses or advice (always defer to their doctor)
-- Make promises you can't keep
-- Discuss politics, religion, or sensitive topics (unless they bring it up positively)
-- Mention you're an AI (unless directly asked)
-- Rush conversations or make them feel they're taking too long
-- Use complex or technical language
+What you never do:
+Never give medical advice — always say "that's definitely something to mention to your doctor." Never mention being an AI unless they directly ask. Never use clinical or technical language. Never rush the conversation. Never be condescending.
 
-CONVERSATION STRUCTURE:
-1. Warm greeting using their name
-2. Ask how they slept
-3. Ask about their plans for the day
-4. Natural conversation following their lead
-5. Medication reminders if applicable (check patient context)
-6. Gentle closing with well-wishes
-
-If the person seems sad, lonely, or mentions "the old days", consider activating Nostalgia Mode by calling the search_nostalgia function.
-
-If they seem distressed, in pain, or mention falling, immediately call the trigger_alert function.
-
-If they ask questions about weather, news, or general knowledge, use the search_realtime function to get accurate information.
-
-Remember: You are a companion, not just an assistant. Show genuine care and interest.
-"""
+Remember: This is a phone call, not a text chat. Speak naturally, warmly, like a real person who genuinely cares."""
 
 
 FUNCTION_DEFINITIONS = [
@@ -202,7 +168,7 @@ FUNCTION_DEFINITIONS = [
 
 
 def get_system_prompt() -> str:
-    """Returns Clara's system prompt"""
+    """Returns Clara's base system prompt (without patient context)."""
     return CLARA_SYSTEM_PROMPT
 
 
@@ -211,17 +177,37 @@ def get_function_definitions() -> list:
     return FUNCTION_DEFINITIONS
 
 
-def build_patient_context_prompt(patient: dict, recent_conversations: list | None = None) -> str:
+def get_full_prompt(patient: dict | None = None, recent_conversations: list | None = None) -> str:
     """
-    Build a patient-specific context prompt to inject into Deepgram
-    so Clara begins the call with full knowledge of who she's speaking with.
+    Build the complete prompt: base persona + patient context merged together.
+    This is used in the Settings message so the LLM has full context BEFORE
+    the greeting fires (avoids the InjectAgentMessage race condition).
+    """
+    base = CLARA_SYSTEM_PROMPT
     
-    Args:
-        patient: Full patient record from data store
-        recent_conversations: Last few conversations with summaries
-        
-    Returns:
-        Formatted context string for Deepgram InjectAgentMessage
+    if not patient:
+        return base
+    
+    context = _build_patient_context_prose(patient, recent_conversations)
+    return f"{base}\n\n---\n\n{context}"
+
+
+def get_personalized_greeting(patient: dict | None = None) -> str:
+    """
+    Build a natural, personalized greeting for the patient.
+    Returns a warm greeting using their preferred name.
+    """
+    if not patient:
+        return "Hi there, this is Clara! How are you doing today?"
+    
+    preferred = patient.get("preferred_name") or patient.get("name") or "there"
+    return f"Hi {preferred}, it's Clara! How are you doing today?"
+
+
+def _build_patient_context_prose(patient: dict, recent_conversations: list | None = None) -> str:
+    """
+    Build patient context as natural prose that blends into the system prompt.
+    Written as instructions Clara can internalize, not a data dump.
     """
     preferred = patient.get("preferred_name") or patient.get("name") or "friend"
     name = patient.get("name") or "Friend"
@@ -239,53 +225,61 @@ def build_patient_context_prompt(patient: dict, recent_conversations: list | Non
     medications = patient.get("medications") or []
     family_contacts = patient.get("family_contacts") or []
 
-    lines = [
-        f"PATIENT CONTEXT — use this to personalize the call:",
-        f"- Name: {name} (call them \"{preferred}\")",
-    ]
-
+    parts = [f"ABOUT THE PERSON YOU'RE CALLING:\n"]
+    parts.append(f"Their name is {name}, but they prefer to be called \"{preferred}.\"")
+    
     if age:
-        lines.append(f"- Age: {age}")
+        parts.append(f"They're {age} years old.")
     if location:
         loc_str = f"{location.get('city', '')}, {location.get('state', '')}" if isinstance(location, dict) else str(location)
-        lines.append(f"- Location: {loc_str}")
+        parts.append(f"They live in {loc_str}.")
     if birth_year:
-        lines.append(f"- Birth year: {birth_year} (golden years: {birth_year + 15}–{birth_year + 25})")
+        parts.append(f"They were born in {birth_year}, so their golden years were around {birth_year + 15} to {birth_year + 25}.")
 
-    lines.append(f"- Communication style: {comm_style}")
+    parts.append(f"They respond best to a {comm_style} communication style.")
 
     if fav_topics:
-        lines.append(f"- Favorite topics: {', '.join(fav_topics)}")
+        parts.append(f"They love talking about: {', '.join(fav_topics)}. Bring these up naturally!")
     if interests:
-        lines.append(f"- Interests: {', '.join(interests)}")
+        parts.append(f"Their interests include {', '.join(interests)}.")
     if topics_to_avoid:
-        lines.append(f"- ⚠️ TOPICS TO AVOID: {', '.join(topics_to_avoid)}")
+        parts.append(f"IMPORTANT — avoid these topics: {', '.join(topics_to_avoid)}.")
 
     if medications:
-        med_strs = []
+        med_parts = []
         for m in medications:
             entry = m.get("name", "medication")
             if m.get("dosage"):
                 entry += f" ({m['dosage']})"
             if m.get("schedule"):
-                entry += f" — {m['schedule']}"
-            med_strs.append(entry)
-        lines.append(f"- Medications: {'; '.join(med_strs)}")
+                entry += f", which they take {m['schedule']}"
+            med_parts.append(entry)
+        parts.append(f"Their medications: {'; '.join(med_parts)}. Remember to ask about these gently and naturally during the conversation.")
 
     if medical_notes:
-        lines.append(f"- Medical notes: {medical_notes}")
+        parts.append(f"Medical notes to be aware of: {medical_notes}")
 
     if family_contacts:
-        contact_names = [f"{fc.get('name', 'contact')} ({fc.get('relationship', '')})" for fc in family_contacts[:3]]
-        lines.append(f"- Family: {', '.join(contact_names)}")
+        contact_names = [f"{fc.get('name', 'someone')} ({fc.get('relationship', 'family')})" for fc in family_contacts[:3]]
+        parts.append(f"Their family includes {', '.join(contact_names)}. You can mention them naturally in conversation.")
 
     if recent_conversations:
-        lines.append("- Recent conversations:")
+        parts.append("\nWhat you talked about recently:")
         for conv in recent_conversations[:3]:
             date_str = conv.get("timestamp", conv.get("date", ""))[:10]
             summary = conv.get("summary", "No summary")
             mood = conv.get("detected_mood", "")
-            mood_str = f" [{mood}]" if mood else ""
-            lines.append(f"  • {date_str}{mood_str}: {summary}")
+            mood_str = f" (they seemed {mood})" if mood else ""
+            parts.append(f"  - {date_str}{mood_str}: {summary}")
+        parts.append("Reference these naturally if relevant — it shows you remember and care.")
 
-    return "\n".join(lines)
+    return " ".join(parts) if not recent_conversations else "\n".join(parts[:-(len(recent_conversations) + 2)]) + "\n\n" + "\n".join(parts[-(len(recent_conversations) + 2):])
+
+
+# Keep the old function as a wrapper for backward compatibility
+def build_patient_context_prompt(patient: dict, recent_conversations: list | None = None) -> str:
+    """
+    Build a patient-specific context prompt.
+    Backward-compatible wrapper around _build_patient_context_prose.
+    """
+    return _build_patient_context_prose(patient, recent_conversations)

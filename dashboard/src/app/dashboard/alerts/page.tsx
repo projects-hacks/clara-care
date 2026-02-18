@@ -6,7 +6,7 @@ import TopBar from '@/components/TopBar'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import AlertCard from '@/components/AlertCard'
 import EmptyState from '@/components/EmptyState'
-import { getAlerts, acknowledgeAlert, getPatientId } from '@/lib/api'
+import { getAlerts, getPatient, acknowledgeAlert, getPatientId } from '@/lib/api'
 import type { Alert } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -17,13 +17,19 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('All')
+  const [patient, setPatient] = useState<{ family_contacts?: { id: string, name: string }[] } | null>(null)
   const [showUnacknowledgedOnly, setShowUnacknowledgedOnly] = useState(false)
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await getAlerts(getPatientId())
-        setAlerts(data)
+        const pid = getPatientId()
+        const [alertData, patientData] = await Promise.all([
+          getAlerts(pid),
+          getPatient(pid)
+        ])
+        setAlerts(alertData)
+        setPatient(patientData)
       } catch {
         setError('Failed to load alerts')
       } finally {
@@ -33,11 +39,14 @@ export default function AlertsPage() {
     load()
   }, [])
 
+  const familyId = patient?.family_contacts?.[0]?.id || 'family-member'
+  const familyName = patient?.family_contacts?.[0]?.name || 'Family Member'
+
   const handleAcknowledge = async (id: string) => {
-    await acknowledgeAlert(id, 'Family Member')
+    await acknowledgeAlert(id, familyId)
     setAlerts((prev) =>
       prev.map((a) =>
-        a.id === id ? { ...a, acknowledged: true, acknowledged_by: 'Family Member' } : a
+        a.id === id ? { ...a, acknowledged: true, acknowledged_by: familyName } : a
       )
     )
   }
