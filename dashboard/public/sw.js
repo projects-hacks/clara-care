@@ -1,14 +1,15 @@
 // ClaraCare Service Worker
 // Provides offline caching for the PWA shell and API responses
 
-const CACHE_NAME = 'claracare-v1'
+const CACHE_NAME = 'claracare-v2'
 
 const PRECACHE_URLS = [
     '/',
-    '/alerts',
-    '/history',
-    '/trends',
-    '/settings',
+    '/dashboard',
+    '/dashboard/alert',
+    '/dashboard/history',
+    '/dashboard/trends',
+    '/dashboard/settings',
     '/manifest.json',
     '/icon-192.png',
     '/icon-512.png',
@@ -37,7 +38,7 @@ self.addEventListener('activate', (event) => {
     )
 })
 
-// Fetch — network-first for API, cache-first for static assets
+// Fetch — Network-First for HTML/API, Cache-First for static assets
 self.addEventListener('fetch', (event) => {
     const { request } = event
     const url = new URL(request.url)
@@ -45,8 +46,13 @@ self.addEventListener('fetch', (event) => {
     // Skip non-GET requests
     if (request.method !== 'GET') return
 
-    // API requests — network first, cache fallback
-    if (url.pathname.startsWith('/api/') || url.hostname === 'api.claracare.me') {
+    // API & Navigation (HTML) requests — Network First
+    // This ensures we always get the latest dashboard/landing page version
+    if (
+        request.mode === 'navigate' ||
+        url.pathname.startsWith('/api/') ||
+        url.hostname === 'api.claracare.me'
+    ) {
         event.respondWith(
             fetch(request)
                 .then((response) => {
@@ -59,7 +65,7 @@ self.addEventListener('fetch', (event) => {
         return
     }
 
-    // Static/page requests — cache first, network fallback
+    // Static assets (JS, CSS, Images) — Cache First
     event.respondWith(
         caches.match(request).then((cached) => {
             if (cached) return cached
