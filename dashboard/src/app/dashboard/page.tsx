@@ -127,6 +127,21 @@ export default function HomePage() {
       <TopBar title="ClaraCare" subtitle={patient?.name ? `Caring for ${patient.preferred_name}` : undefined} />
 
       <main className="space-y-4 px-4 py-4">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome back, {patient?.name.split(' ')[0] || 'Friend'}
+          </h1>
+          <button
+            onClick={handleDownloadReport}
+            disabled={downloading || !patient}
+            className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
+            aria-label="Download cognitive report PDF"
+          >
+            <Download className={`h-4 w-4 ${downloading ? 'animate-bounce' : ''}`} />
+            {downloading ? 'Generating Report...' : 'Download Report'}
+          </button>
+        </div>
+
         {/* Call Now Button */}
         {patient && (
           <CallButton
@@ -138,18 +153,7 @@ export default function HomePage() {
 
         {digest && (
           <section className="rounded-xl bg-white p-4 shadow-sm" aria-label="Wellness Summary">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Today&apos;s Wellness</h2>
-              <button
-                onClick={handleDownloadReport}
-                disabled={downloading}
-                className="flex items-center gap-1.5 rounded-lg bg-clara-50 px-3 py-1.5 text-xs font-medium text-clara-700 transition-colors hover:bg-clara-100 disabled:opacity-50"
-                aria-label="Download cognitive report PDF"
-              >
-                <Download className={`h-3.5 w-3.5 ${downloading ? 'animate-bounce' : ''}`} />
-                {downloading ? 'Generating...' : 'Download Report'}
-              </button>
-            </div>
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">Today&apos;s Wellness</h2>
             <div className="flex items-center gap-4">
               <CognitiveScoreBadge
                 score={digest.cognitive_score}
