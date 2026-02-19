@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { MessageSquare, Bell, Calendar, Sparkles, ChevronRight } from 'lucide-react'
+import { MessageSquare, Bell, Calendar, Sparkles, ChevronRight, Download } from 'lucide-react'
 import TopBar from '@/components/TopBar'
 import CallButton from '@/components/CallButton'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -18,6 +18,7 @@ import {
   getInsights,
   acknowledgeAlert,
   getPatientId,
+  downloadReport,
 } from '@/lib/api'
 import type { Patient, Conversation, Alert, WellnessDigest, Insights } from '@/lib/api'
 import { useRouter } from 'next/navigation'
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [insights, setInsights] = useState<Insights | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -65,6 +67,28 @@ export default function HomePage() {
     setAlerts((prev) =>
       prev.map((a) => (a.id === id ? { ...a, acknowledged: true, acknowledged_by: familyName } : a))
     )
+  }
+
+  const handleDownloadReport = async () => {
+    if (!patient) return
+    setDownloading(true)
+    try {
+      const blob = await downloadReport(patient.id)
+      if (blob) {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `cognitive-report-${patient.id}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+    } catch (e) {
+      console.error('Download failed:', e)
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (loading) {
@@ -114,7 +138,18 @@ export default function HomePage() {
 
         {digest && (
           <section className="rounded-xl bg-white p-4 shadow-sm" aria-label="Wellness Summary">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Today&apos;s Wellness</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">Today&apos;s Wellness</h2>
+              <button
+                onClick={handleDownloadReport}
+                disabled={downloading}
+                className="flex items-center gap-1.5 rounded-lg bg-clara-50 px-3 py-1.5 text-xs font-medium text-clara-700 transition-colors hover:bg-clara-100 disabled:opacity-50"
+                aria-label="Download cognitive report PDF"
+              >
+                <Download className={`h-3.5 w-3.5 ${downloading ? 'animate-bounce' : ''}`} />
+                {downloading ? 'Generating...' : 'Download Report'}
+              </button>
+            </div>
             <div className="flex items-center gap-4">
               <CognitiveScoreBadge
                 score={digest.cognitive_score}
@@ -237,3 +272,4 @@ export default function HomePage() {
     </>
   )
 }
+

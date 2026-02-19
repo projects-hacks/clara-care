@@ -27,11 +27,18 @@ spec:
             name: claracare-secrets
         resources:
           requests:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "2Gi"
+            cpu: "1000m"
+            # nvidia.com/gpu: 1    # Uncomment for GPU
           limits:
             memory: "3Gi"
             cpu: "2000m"
+            # nvidia.com/gpu: 1    # Uncomment for GPU
+        # tolerations:             # Uncomment to schedule on GPU node
+        # - key: "sku"
+        #   operator: "Equal"
+        #   value: "gpu"
+        #   effect: "NoSchedule"
         livenessProbe:
           httpGet:
             path: /health

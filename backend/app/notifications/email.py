@@ -281,9 +281,11 @@ class EmailNotifier:
             "vocabulary_shrinkage": "Changes in speech patterns",
             "repetitive_speech": "Repetitive conversation patterns",
             "word_finding_difficulty": "Difficulty finding words",
-            "cognitive_decline": "Changes in cognitive performance",
+            "cognitive_decline": "Memory inconsistency detected",
+            "coherence_drop": "Conversation clarity concern",
             "coherence_issues": "Changes in conversation clarity",
             "baseline_deviation": "Unusual patterns detected",
+            "distress": "Signs of distress detected",
             "social_connection": "Social Connection Opportunity"
         }
         return friendly_names.get(alert_type, alert_type.replace('_', ' ').title())

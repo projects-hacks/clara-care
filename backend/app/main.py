@@ -118,14 +118,15 @@ async def lifespan(app: FastAPI):
     if HAS_DATA_ROUTES:
         from .routes import insights, reports
         from .reports.generator import ReportGenerator
-        from .reports.foxit_client import FoxitClient
+        from .reports.foxit_client import FoxitClient, FoxitPDFServicesClient
         
         # Initialize insights with data store
         insights.set_data_store(data_store)
         
-        # Initialize reports with report generator
+        # Initialize reports with report generator + PDF Services
         foxit_client = FoxitClient()
-        report_gen = ReportGenerator(data_store, foxit_client)
+        pdf_services = FoxitPDFServicesClient()
+        report_gen = ReportGenerator(data_store, foxit_client, pdf_services)
         reports.set_report_generator(report_gen)
         
         logger.info("✓ Data routes initialized")

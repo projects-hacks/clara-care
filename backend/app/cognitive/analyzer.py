@@ -43,8 +43,13 @@ def get_sentence_transformer():
     if _sentence_model is None:
         try:
             from sentence_transformers import SentenceTransformer
-            _sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Loaded sentence-transformer model: all-MiniLM-L6-v2")
+            import torch
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"⚡ Loading SentenceTransformer on device: {device.upper()}")
+            
+            _sentence_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+            logger.info(f"✓ SentenceTransformer loaded successfully on {device.upper()}")
         except Exception as e:
             logger.warning(f"Failed to load sentence-transformer: {e}")
             _sentence_model = None

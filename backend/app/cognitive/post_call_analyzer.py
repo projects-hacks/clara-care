@@ -69,14 +69,24 @@ async def analyze_transcript(transcript: str) -> dict:
     # 2. Elder-care keyword analysis (safety, meds, loneliness, connection)
     care_analysis = _elder_care_analysis(transcript)
     
-    # 3. Merge into unified result
+    # 3. Memory inconsistency detection (YES -> UNSURE -> NO pattern)
+    memory_flags = _detect_memory_inconsistency(transcript)
+    care_analysis["memory_inconsistency"] = memory_flags
+    if memory_flags:
+        care_analysis["action_items"].append(
+            f"Confabulation detected: {memory_flags[0][:100]}"
+        )
+    
+    # 4. Merge into unified result
     result = _merge_analysis(dg_analysis, care_analysis, transcript)
+    result["memory_inconsistency"] = memory_flags
     
     logger.info(
         f"[POST_CALL_ANALYSIS] mood={result.get('mood')}, "
         f"topics={result.get('topics')}, "
         f"safety_flags={len(result.get('safety_flags', []))}, "
-        f"desire_to_connect={result.get('desire_to_connect')}"
+        f"desire_to_connect={result.get('desire_to_connect')}, "
+        f"memory_flags={len(memory_flags)}"
     )
     
     return result
@@ -88,6 +98,14 @@ async def _deepgram_analyze(transcript: str) -> dict:
     if not api_key:
         logger.warning("DEEPGRAM_API_KEY not set — skipping Deepgram analysis")
         return {}
+    
+    # Add context prefix so Deepgram understands the roles
+    context_prefix = (
+        "The following is a transcript of a wellness check-in phone call "
+        "between Clara (an AI companion) and an elderly patient. "
+        "Summarize what the PATIENT discussed, their mood, and key topics.\n\n"
+    )
+    transcript_for_analysis = context_prefix + transcript
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -104,16 +122,21 @@ async def _deepgram_analyze(transcript: str) -> dict:
                     "Authorization": f"Token {api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"text": transcript},
+                json={"text": transcript_for_analysis},
             )
             response.raise_for_status()
             data = response.json()
             
             results = data.get("results", {})
             
-            # Extract summary
+            # Extract summary and clean up persona references
             summary_info = results.get("summary") or {}
             summary = summary_info.get("text", "")
+            
+            # Post-process: replace generic "customer" with context-aware text
+            for generic in ["a customer", "A customer", "the customer", "The customer",
+                            "a caller", "A caller", "the caller", "The caller"]:
+                summary = summary.replace(generic, "the patient")
             
             # Extract topics
             topics_data = results.get("topics", {}).get("segments", [])
@@ -294,6 +317,53 @@ def _extract_patient_text(transcript: str) -> str:
         if line.startswith("Patient:"):
             patient_msgs.append(line.split(":", 1)[1].strip())
     return " ".join(patient_msgs)
+
+
+def _detect_memory_inconsistency(transcript: str) -> list[str]:
+    """
+    Detect memory inconsistency patterns within patient turns.
+    Catches YES -> UNSURE -> NO contradictions within a sliding window of turns.
+    
+    Example: "Yes I took it" -> "I think so" -> "Can't remember"
+    """
+    lines = transcript.split("\n")
+    patient_turns = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        speaker = line.split(":", 1)[0].strip().lower()
+        if speaker in ("patient", "emily", "dorothy"):
+            text = line.split(":", 1)[1].strip().lower() if ":" in line else ""
+            patient_turns.append(text)
+    
+    if len(patient_turns) < 2:
+        return []
+    
+    flags = []
+    affirmative = {"yes", "yeah", "yep", "sure", "of course", "i did", "i took"}
+    uncertain = {"i think so", "maybe", "probably", "not sure", "i guess"}
+    negative = {"no", "can't remember", "i don't know", "i forgot", "didn't", "haven't"}
+    
+    # Sliding window of 3-4 turns
+    window_size = 4
+    for i in range(len(patient_turns) - 1):
+        window = patient_turns[i:i + window_size]
+        
+        has_affirm = any(any(a in turn for a in affirmative) for turn in window[:2])
+        has_contradict = any(
+            any(n in turn for n in negative) or any(u in turn for u in uncertain)
+            for turn in window[1:]
+        )
+        
+        if has_affirm and has_contradict:
+            context = " → ".join(f'"{t[:50]}"' for t in window if t)
+            flags.append(
+                f"Patient changed from affirmative to uncertain/negative within {len(window)} turns: {context}"
+            )
+            break  # One flag per conversation is enough
+    
+    return flags
 
 
 def _scan_safety_keywords(transcript: str) -> list[str]:

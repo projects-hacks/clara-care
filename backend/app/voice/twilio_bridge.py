@@ -275,11 +275,29 @@ class TwilioCallSession:
                     f"safety_flags={len(analysis.get('safety_flags', []))}"
                 )
                 
-                # ── Safety + Connection Alert Auto-Generation ─────────────────
+                # ── Safety + Connection + Memory Alert Auto-Generation ─────────
                 safety_flags = analysis.get("safety_flags", [])
                 desire_to_connect = analysis.get("desire_to_connect", False)
+                memory_flags = analysis.get("memory_inconsistency", [])
+                
                 if safety_flags or desire_to_connect:
                     await self._create_safety_alerts(safety_flags, analysis)
+                
+                # Memory inconsistency alert (YES → UNSURE → NO pattern)
+                if memory_flags and self.deepgram_agent and self.deepgram_agent.function_handler:
+                    logger.warning(
+                        f"[MEMORY_ALERT] CallSid={self.call_sid} "
+                        f"inconsistency={memory_flags[0][:100]}"
+                    )
+                    await self.deepgram_agent.function_handler.execute(
+                        "trigger_alert",
+                        {
+                            "patient_id": self.patient_id,
+                            "severity": "medium",
+                            "alert_type": "cognitive_decline",
+                            "message": f"Memory inconsistency detected: {memory_flags[0][:200]}"
+                        }
+                    )
                 
                 # ── Save via cognitive pipeline ─────────────────────────────
                 pipeline_result = await self.deepgram_agent.function_handler.execute(
@@ -289,9 +307,29 @@ class TwilioCallSession:
                         "transcript": transcript_text,
                         "duration": call_duration_sec or len(self.conversation_transcript) * 5,
                         "summary": summary,
-                        "detected_mood": detected_mood
+                        "detected_mood": detected_mood,
+                        "analysis": analysis
                     }
                 )
+                
+                # ── Low-coherence auto-alert ─────────────────────────────────
+                if pipeline_result and pipeline_result.get("success"):
+                    metrics = pipeline_result.get("metrics", {})
+                    coherence = metrics.get("topic_coherence")
+                    if (coherence is not None and coherence < 0.40
+                            and self.deepgram_agent and self.deepgram_agent.function_handler):
+                        logger.warning(
+                            f"[COHERENCE_ALERT] CallSid={self.call_sid} coherence={coherence:.2f}"
+                        )
+                        await self.deepgram_agent.function_handler.execute(
+                            "trigger_alert",
+                            {
+                                "patient_id": self.patient_id,
+                                "severity": "medium",
+                                "alert_type": "coherence_drop",
+                                "message": f"Low topic coherence detected ({coherence:.2f}). Conversation may indicate confusion or disorientation."
+                            }
+                        )
                 
                 if pipeline_result and pipeline_result.get("success"):
                     logger.info(

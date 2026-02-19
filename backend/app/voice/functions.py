@@ -375,6 +375,7 @@ class FunctionHandler:
         summary = params.get("summary", "")
         detected_mood = params.get("detected_mood", "neutral")
         response_times = params.get("response_times")  # Optional timing data for analysis
+        analysis = params.get("analysis")  # Post-call analysis data for richer digests
         
         # If cognitive pipeline is available, run full analysis
         if self.cognitive_pipeline:
@@ -387,7 +388,8 @@ class FunctionHandler:
                     duration=duration,
                     summary=summary,
                     detected_mood=detected_mood,
-                    response_times=response_times
+                    response_times=response_times,
+                    analysis=analysis
                 )
                 
                 if result.get("success"):
@@ -401,7 +403,8 @@ class FunctionHandler:
                         "message": "Conversation analyzed and saved",
                         "conversation_id": result["conversation_id"],
                         "cognitive_score": result["digest"]["cognitive_score"],
-                        "alerts_generated": len(result.get("alerts", []))
+                        "alerts_generated": len(result.get("alerts", [])),
+                        "metrics": result.get("metrics", {})
                     }
                 else:
                     logger.error(f"Cognitive pipeline failed: {result.get('error')}")
