@@ -14,11 +14,43 @@ const PERIODS = [
   { label: '30d', days: 30 },
 ] as const
 
-const METRICS: { key: keyof Omit<CognitiveTrend, 'timestamp'>; baseline: number }[] = [
-  { key: 'vocabulary_diversity', baseline: 0.63 },
-  { key: 'topic_coherence', baseline: 0.87 },
-  { key: 'repetition_rate', baseline: 0.05 },
-  { key: 'word_finding_pauses', baseline: 1.5 },
+type MetricKey = keyof Omit<CognitiveTrend, 'timestamp'>
+
+const METRICS: {
+  key: MetricKey
+  baseline: number
+  higherIsBetter: boolean
+  description: string
+  helperText: string
+}[] = [
+  {
+    key: 'vocabulary_diversity',
+    baseline: 0.63,
+    higherIsBetter: true,
+    description: 'How wide a range of words she used in conversation.',
+    helperText: 'Higher is generally better here.',
+  },
+  {
+    key: 'topic_coherence',
+    baseline: 0.87,
+    higherIsBetter: true,
+    description: 'How smoothly the conversation flowed from topic to topic.',
+    helperText: 'Higher means the conversation is easier to follow.',
+  },
+  {
+    key: 'repetition_rate',
+    baseline: 0.05,
+    higherIsBetter: false,
+    description: 'How often stories or phrases were repeated.',
+    helperText: 'Lower is better for this metric.',
+  },
+  {
+    key: 'word_finding_pauses',
+    baseline: 1.5,
+    higherIsBetter: false,
+    description: 'How frequently she paused to search for words.',
+    helperText: 'Lower is better; more pauses can signal strain.',
+  },
 ]
 
 export default function TrendsPage() {
@@ -46,9 +78,10 @@ export default function TrendsPage() {
 
   return (
     <>
-      <TopBar title="Cognitive Trends" />
+      <TopBar title="Cognitive Trends" subtitle="See how key abilities change over time" />
 
-      <div className="flex gap-2 px-4 pt-3">
+      {/* Time range selector */}
+      <div className="flex gap-2 px-4 pt-3" aria-label="Time range">
         {PERIODS.map((p) => (
           <button
             key={p.days}
@@ -69,30 +102,113 @@ export default function TrendsPage() {
       <main className="space-y-4 px-4 py-4">
         {loading && <LoadingSpinner />}
 
-        {error && (
+        {error && !loading && (
           <div className="py-8 text-center text-sm text-red-500">{error}</div>
         )}
 
-        {!loading &&
-          !error &&
-          METRICS.map((m) => (
-            <section
-              key={m.key}
-              className="rounded-xl bg-white p-4 shadow-sm"
-              aria-label={metricLabel(m.key)}
-            >
-              <h2 className="mb-1 text-sm font-semibold text-gray-900">
-                {metricLabel(m.key)}
-              </h2>
-              <CognitiveChart
-                data={filteredTrends}
-                metric={m.key}
-                baselineValue={m.baseline}
-                height={180}
-              />
-            </section>
-          ))}
+        {!loading && !error && METRICS.map((m) => (
+          <TrendMetricCard
+            key={m.key}
+            metric={m}
+            trends={filteredTrends}
+          />
+        ))}
       </main>
     </>
+  )
+}
+
+interface TrendMetricCardProps {
+  metric: typeof METRICS[number]
+  trends: CognitiveTrend[]
+}
+
+function TrendMetricCard({ metric, trends }: TrendMetricCardProps) {
+  const metricPoints = trends
+    .map((t) => t[metric.key])
+    .filter((v): v is number => v !== null && v !== undefined)
+
+  const latest = metricPoints.length > 0 ? metricPoints[metricPoints.length - 1] : null
+  const baseline = metric.baseline
+  const deltaPct = latest !== null && baseline
+    ? ((latest - baseline) / baseline) * 100
+    : null
+
+  let deltaLabel: string | null = null
+  if (deltaPct !== null) {
+    const abs = Math.abs(deltaPct)
+    if (abs < 3) {
+      deltaLabel = 'Roughly in line with baseline'
+    } else {
+      const better = metric.higherIsBetter ? deltaPct > 0 : deltaPct < 0
+      deltaLabel = better ? 'Healthier than baseline' : 'Below usual baseline'
+    }
+  }
+
+  return (
+    <section
+      className="rounded-xl bg-white p-4 shadow-sm"
+      aria-label={metricLabel(metric.key)}
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-gray-900">
+            {metricLabel(metric.key)}
+          </h2>
+          <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
+            {metric.description}
+          </p>
+        </div>
+        {latest !== null && (
+          <div className="shrink-0 text-right">
+            <p className="text-[11px] font-medium text-gray-400">Latest value</p>
+            <p className="text-sm font-semibold text-gray-900">
+              {latest.toFixed(2)}
+            </p>
+            {deltaPct !== null && (
+              <p
+                className={cn(
+                  'mt-0.5 text-[11px] font-medium',
+                  deltaPct === 0
+                    ? 'text-gray-500'
+                    : metric.higherIsBetter
+                    ? deltaPct > 0
+                      ? 'text-emerald-600'
+                      : 'text-red-500'
+                    : deltaPct < 0
+                      ? 'text-emerald-600'
+                      : 'text-red-500'
+                )}
+              >
+                {deltaPct > 0 ? '+' : ''}
+                {deltaPct.toFixed(1)}%
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <CognitiveChart
+        data={trends}
+        metric={metric.key}
+        baselineValue={baseline}
+        height={190}
+      />
+
+      <div className="mt-3 space-y-1.5 text-[11px] text-gray-600">
+        <p>{metric.helperText}</p>
+        {latest !== null && (
+          <p>
+            <span className="font-medium text-gray-700">Latest vs. baseline: </span>
+            {latest.toFixed(2)}{' '}
+            <span className="text-gray-400">(baseline {baseline.toFixed(2)})</span>
+            {deltaLabel && <span className="ml-1 text-gray-700">• {deltaLabel}</span>}
+          </p>
+        )}
+        <p className="text-[10px] text-gray-400">
+          Tip: Tap and hold anywhere on the line to see the exact value for that day.
+        </p>
+      </div>
+    </section>
   )
 }

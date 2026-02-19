@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react'
 import { Sparkles, Plus, X, Save } from 'lucide-react'
 import TopBar from '@/components/TopBar'
-import Skeleton, { SkeletonLine } from '@/components/Skeleton'
+import { SkeletonLine } from '@/components/Skeleton'
 import ErrorState from '@/components/ErrorState'
 import { getPatient, getInsights, getPatientId, updatePatient } from '@/lib/api'
 import type { Patient, Insights } from '@/lib/api'
-import { cn } from '@/lib/utils'
 
 function EditableTagList({
   tags,
@@ -137,7 +136,7 @@ export default function NostalgiaPage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Nostalgia" />
+        <TopBar title="Nostalgia" subtitle="Tune what Clara talks about" />
         <main className="space-y-6 px-5 py-6" aria-busy>
           {[1, 2, 3, 4].map((i) => (
             <section
@@ -159,7 +158,7 @@ export default function NostalgiaPage() {
   if (error || !patient) {
     return (
       <>
-        <TopBar title="Nostalgia" />
+        <TopBar title="Nostalgia" subtitle="Tune what Clara talks about" />
         <main className="px-5 py-6">
           <ErrorState
             message={error || 'No data available'}
@@ -193,7 +192,7 @@ export default function NostalgiaPage() {
 
   return (
     <>
-      <TopBar title="Nostalgia Preferences" />
+      <TopBar title="Nostalgia" subtitle="Help Clara pick stories that land" />
 
       <main className="space-y-6 px-5 py-6">
         <section className="rounded-xl border border-gray-100 bg-gradient-to-br from-purple-50/80 to-clara-50/80 p-5 shadow-card">

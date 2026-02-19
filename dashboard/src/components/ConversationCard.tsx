@@ -19,7 +19,7 @@ export default function ConversationCard({ conversation, onClick }: Conversation
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl bg-white p-4 text-left shadow-sm transition-shadow active:shadow-none"
+      className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm transition-all active:scale-[0.995] active:bg-gray-50"
       type="button"
     >
       <div className="min-w-0 flex-1">
@@ -30,10 +30,12 @@ export default function ConversationCard({ conversation, onClick }: Conversation
             {formatDuration(conversation.duration)}
           </span>
         </div>
-        <p className="mb-1 text-sm leading-snug text-gray-700">{summary}</p>
-        <p className="text-[11px] text-gray-400">{formatTimeAgo(conversation.timestamp)}</p>
+        <p className="mb-1 text-sm font-medium leading-snug text-gray-800">{summary}</p>
+        <p className="text-[11px] text-gray-500">{formatTimeAgo(conversation.timestamp)}</p>
       </div>
-      <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-50">
+        <ChevronRight className="h-4 w-4 text-gray-400" />
+      </div>
     </button>
   )
 }

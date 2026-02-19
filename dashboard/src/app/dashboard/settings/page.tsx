@@ -80,7 +80,7 @@ const RELATIONSHIP_OPTIONS = [
 // ── Input CSS helper ────────────────────────────────────────────────
 
 const inputCls =
-  'w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-clara-500 focus:bg-white focus:ring-2 focus:ring-clara-500/20'
+  'w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-clara-500 focus:bg-white focus:ring-2 focus:ring-clara-500/20'
 
 // ── Tag Input Component ─────────────────────────────────────────────
 
@@ -192,11 +192,11 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="rounded-xl bg-white shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between p-4"
+        className="flex w-full items-center justify-between p-4 transition-colors hover:bg-gray-50 active:bg-gray-50"
       >
         <div className="flex items-center gap-2">
           <Icon className={cn('h-4 w-4', iconColor)} />
@@ -456,7 +456,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Settings" />
+        <TopBar title="Settings" subtitle="Fine-tune calls, contacts, and alerts" />
         <LoadingSpinner />
       </>
     )
@@ -465,7 +465,7 @@ export default function SettingsPage() {
   if (error && !patient) {
     return (
       <>
-        <TopBar title="Settings" />
+        <TopBar title="Settings" subtitle="Fine-tune calls, contacts, and alerts" />
         <div className="flex items-center justify-center px-4 py-16">
           <p className="text-sm text-red-500">{error}</p>
         </div>
@@ -475,9 +475,18 @@ export default function SettingsPage() {
 
   return (
     <>
-      <TopBar title="Settings" />
+      <TopBar
+        title="Settings"
+        subtitle="Update how and when Clara reaches your loved one"
+      />
 
-      <main className="space-y-3 px-4 py-4 pb-36">
+      <main className="space-y-3 px-4 py-4">
+        <section className="rounded-2xl bg-gradient-to-br from-clara-50 to-white p-4 shadow-sm" aria-label="Settings overview">
+          <h2 className="text-sm font-semibold text-gray-900">Personalize Clara for your family</h2>
+          <p className="mt-1 text-[11px] leading-snug text-gray-600">
+            Adjust call times, phone numbers, medications, and who should be notified when Clara detects something important.
+          </p>
+        </section>
         {/* ── Error Banner ────────────────────── */}
         {error && (
           <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-600">

@@ -3,8 +3,8 @@ Conversation API Routes
 Endpoints for conversation history and details
 """
 
+import re
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -37,6 +37,109 @@ def set_cognitive_pipeline(pipeline):
     _cognitive_pipeline = pipeline
 
 
+# ---------------------------------------------------------------------------
+# Summary normalizer — strips raw AI preamble from stored summaries
+# ---------------------------------------------------------------------------
+
+_SUMMARY_NOISE = [
+    # "A wellness check-in phone call between Clara... "
+    re.compile(r"A wellness check-in phone call between Clara[^.]+\.\s*", re.I),
+    # "between Clara (an AI companion)..."
+    re.compile(r"between Clara \(an AI companion\)[^,.]*, ?", re.I),
+    # "Summarizing the call, Clara..." or just "Summarizing the call,"
+    re.compile(r"Summarizing the call,?\s*Clara[^.]+\.\s*", re.I),
+    re.compile(r"Summarizing the call,?\s*", re.I),
+    # "discussed topics such as mood, stress..."
+    re.compile(r"discussed topics such as [^.]+\.\s*", re.I),
+    # "(an AI companion)"
+    re.compile(r"\(an AI companion\)", re.I),
+    # "Clara asks" sentence starts
+    re.compile(r"^Clara asks[^.]+\.\s*", re.I | re.M),
+    # "A customer named Clara talks to <name> about..." style preamble
+    re.compile(r"A customer named Clara[^.]+\.\s*", re.I),
+    # "They discuss her usual activities..." opener
+    re.compile(r"^They discuss [^.]+\.\s*", re.I),
+    # "Patient discussed:" fallback prefix
+    re.compile(r"^Patient discussed:\s*", re.I),
+    # "Topic: " prefix
+    re.compile(r"^Topic:\s*", re.I),
+]
+
+# Inline Clara references → "the companion"
+_CLARA_REF = re.compile(r"\bClara\b")
+
+# Replace "the patient" with she/her based on position — subject vs object
+_THE_PATIENT_SUBJECT = re.compile(r"\bThe patient\b")   # sentence-start (capitalised)
+_THE_PATIENT_OBJECT  = re.compile(r"\bthe patient\b")   # mid-sentence (lowercase)
+
+# Fix "their" when clearly referring to the patient
+_THEIR_POSSESSIVE = re.compile(r"\btheir\b", re.I)
+
+
+
+
+def _clean_summary(raw: str) -> str:
+    """
+    Strip AI-system preamble and persona references from a stored summary.
+    Returns a clean, family-friendly third-person description.
+    """
+    if not raw:
+        return raw
+
+    text = raw.strip()
+
+    # Strip leading noise phrases iteratively until none match
+    changed = True
+    while changed:
+        changed = False
+        for pattern in _SUMMARY_NOISE:
+            new = pattern.sub("", text).strip()
+            if new != text:
+                text = new
+                changed = True
+
+    # Replace remaining inline "Clara" references
+    text = _CLARA_REF.sub("the companion", text)
+    # Replace "The patient" (sentence start) → "She"
+    text = _THE_PATIENT_SUBJECT.sub("She", text)
+    # Replace "the patient" (mid-sentence) → "her"
+    text = _THE_PATIENT_OBJECT.sub("her", text)
+    # Replace "their" → "her" (patient is female)
+    text = _THEIR_POSSESSIVE.sub("her", text)
+
+    # Clean up spacing artefacts
+    text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # Capitalise first letter of each sentence  
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s[0].upper() + s[1:] if s else s for s in sentences]
+    text = " ".join(sentences)
+
+    # Ensure ends with a period
+    if text and text[-1] not in (".", "!", "?"):
+        text += "."
+
+    return text
+
+
+def _normalize_conversation(conv: dict) -> dict:
+    """Normalize a conversation record before serving it to the frontend."""
+    if not conv:
+        return conv
+
+    summary = conv.get("summary", "")
+    clean = _clean_summary(summary)
+    if clean != summary:
+        conv = dict(conv)
+        conv["summary"] = clean
+
+    return conv
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
 @router.get("")
 async def list_conversations(
     patient_id: str = Query(..., description="Patient ID"),
@@ -45,16 +148,17 @@ async def list_conversations(
 ):
     """
     Get paginated list of conversations for a patient
-    
+
     Query params:
         - patient_id: Patient identifier
         - limit: Max results (1-100, default 10)
         - offset: Pagination offset (default 0)
     """
     store = get_data_store()
-    
+
     conversations = await store.get_conversations(patient_id, limit=limit, offset=offset)
-    
+    conversations = [_normalize_conversation(c) for c in conversations]
+
     return {
         "patient_id": patient_id,
         "conversations": conversations,
@@ -68,7 +172,7 @@ async def list_conversations(
 async def get_conversation(conversation_id: str):
     """
     Get full conversation details by ID
-    
+
     Returns:
         - Full transcript
         - Cognitive metrics
@@ -76,22 +180,22 @@ async def get_conversation(conversation_id: str):
         - Timestamp and duration
     """
     store = get_data_store()
-    
+
     conversation = await store.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
-    return conversation
+
+    return _normalize_conversation(conversation)
 
 
 @router.post("")
 async def create_conversation(conversation: dict):
     """
     Create a new conversation record
-    
+
     Body: Conversation object with transcript, metrics, etc.
     If cognitive pipeline is available, will run full analysis.
-    
+
     Required fields:
         - patient_id
         - transcript
@@ -103,7 +207,7 @@ async def create_conversation(conversation: dict):
     """
     store = get_data_store()
     pipeline = get_cognitive_pipeline()
-    
+
     # Validate required fields
     required_fields = ["patient_id", "transcript", "duration"]
     for field in required_fields:
@@ -112,7 +216,7 @@ async def create_conversation(conversation: dict):
                 status_code=400,
                 detail=f"Missing required field: {field}"
             )
-    
+
     # If cognitive pipeline is available, run full analysis
     if pipeline:
         result = await pipeline.process_conversation(
@@ -124,7 +228,7 @@ async def create_conversation(conversation: dict):
             response_times=conversation.get("response_times"),
             conversation_id=conversation.get("id")
         )
-        
+
         if result.get("success"):
             return {
                 "success": True,
@@ -140,7 +244,7 @@ async def create_conversation(conversation: dict):
     else:
         # Fallback: just save raw conversation (no cognitive analysis)
         conversation_id = await store.save_conversation(conversation)
-        
+
         return {
             "success": True,
             "conversation_id": conversation_id,

@@ -1,4 +1,4 @@
-import type { Patient, Conversation, CognitiveMetrics, Alert, WellnessDigest, CognitiveTrend, Insights } from './api'
+import type { Patient, Conversation, Alert, WellnessDigest, CognitiveTrend, Insights } from './api'
 
 const now = new Date()
 const daysAgo = (d: number) => new Date(now.getTime() - d * 86400000).toISOString()
@@ -216,7 +216,8 @@ export const mockAlerts: Alert[] = [
     patient_id: 'patient-dorothy-001',
     alert_type: 'word_finding_difficulty',
     severity: 'medium',
-    description: 'Dorothy experienced significant word-finding difficulty during morning conversation. Could not recall "kettle" and showed extended pauses.',
+    description: 'She has been stopping more often to search for words during her most recent conversation. You might notice phrases like "um," "you know," or sentences that trail off. While this can be normal with age, the increase compared to her usual pattern is worth noting.',
+    suggested_action: 'A relaxed, unhurried conversation can help. Avoid finishing her sentences.',
     acknowledged: false,
     acknowledged_by: null,
     timestamp: daysAgo(3),
@@ -227,7 +228,8 @@ export const mockAlerts: Alert[] = [
     patient_id: 'patient-dorothy-001',
     alert_type: 'repetition_increase',
     severity: 'low',
-    description: 'Repetition rate increased to 0.10 (baseline: 0.05). Consecutive deviation count: 2.',
+    description: 'She has been repeating certain stories or phrases more often than usual across the last 2 conversations. Repetition can sometimes be a sign of something on her mind, or it may reflect short-term memory changes worth watching.',
+    suggested_action: 'Gently steer the conversation toward current activities or topics she enjoys.',
     acknowledged: false,
     acknowledged_by: null,
     timestamp: daysAgo(3),
@@ -238,7 +240,8 @@ export const mockAlerts: Alert[] = [
     patient_id: 'patient-dorothy-001',
     alert_type: 'vocabulary_decline',
     severity: 'low',
-    description: 'Vocabulary diversity dropped below baseline (0.52 vs 0.63 baseline). May be related to fatigue or mood.',
+    description: 'She has been using a more limited range of words than usual across the last 2 conversations. This can sometimes happen when someone is feeling tired, stressed, or experiencing subtle memory changes. It\'s worth keeping an eye on.',
+    suggested_action: 'Note whether this tends to happen at a certain time of day or energy level.',
     acknowledged: true,
     acknowledged_by: 'Sarah Chen',
     timestamp: daysAgo(5),
@@ -249,7 +252,8 @@ export const mockAlerts: Alert[] = [
     patient_id: 'patient-dorothy-001',
     alert_type: 'mood_distress',
     severity: 'high',
-    description: 'Dorothy expressed feelings of loneliness and sadness related to upcoming wedding anniversary. Recommend family check-in.',
+    description: 'Dorothy seemed upset and sad during her recent conversation. She mentioned that a significant date — her wedding anniversary — is coming up, and she appeared to be missing her late husband deeply.',
+    suggested_action: 'Consider reaching out with a comfort call or arranging a visit soon.',
     acknowledged: true,
     acknowledged_by: 'Sarah Chen',
     timestamp: daysAgo(9),
@@ -260,13 +264,39 @@ export const mockAlerts: Alert[] = [
     patient_id: 'patient-dorothy-001',
     alert_type: 'response_latency',
     severity: 'medium',
-    description: 'Response latency increased to 2.4s (baseline: 1.5s). May indicate cognitive fatigue or confusion.',
+    description: 'She has been taking longer than usual to respond in conversations across the last 3 conversations in a row. This can be a sign of fatigue, reduced concentration, or difficulty processing what was said.',
+    suggested_action: 'Check in about her sleep quality and energy levels recently.',
     acknowledged: false,
     acknowledged_by: null,
     timestamp: daysAgo(3),
     conversation_id: 'conv-004',
   },
+  {
+    id: 'alert-006',
+    patient_id: 'patient-dorothy-001',
+    alert_type: 'coherence_drop',
+    severity: 'medium',
+    description: "Today's conversation was noticeably harder to follow than usual. She jumped between topics frequently and had difficulty staying on the same thread. This can be a sign of confusion or difficulty concentrating, and may be worth a gentle check-in.",
+    suggested_action: 'Try a calm catch-up call with simple, direct questions.',
+    acknowledged: false,
+    acknowledged_by: null,
+    timestamp: daysAgo(1),
+    conversation_id: 'conv-002',
+  },
+  {
+    id: 'alert-007',
+    patient_id: 'patient-dorothy-001',
+    alert_type: 'cognitive_decline',
+    severity: 'medium',
+    description: "During today's call, she gave conflicting answers to the same question — first agreeing, then expressing doubt or saying the opposite. This kind of inconsistency can sometimes be an early sign of short-term memory difficulty and is worth watching over the coming conversations.",
+    suggested_action: 'Share this pattern with her doctor at the next scheduled visit.',
+    acknowledged: false,
+    acknowledged_by: null,
+    timestamp: daysAgo(2),
+    conversation_id: 'conv-003',
+  },
 ]
+
 
 export const mockDigest: WellnessDigest = {
   id: 'digest-today',

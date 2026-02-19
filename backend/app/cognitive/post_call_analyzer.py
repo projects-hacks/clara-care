@@ -74,7 +74,7 @@ async def analyze_transcript(transcript: str) -> dict:
     care_analysis["memory_inconsistency"] = memory_flags
     if memory_flags:
         care_analysis["action_items"].append(
-            f"Confabulation detected: {memory_flags[0][:100]}"
+            "She gave conflicting answers during the call, which may be worth watching."
         )
     
     # 4. Merge into unified result
@@ -99,11 +99,12 @@ async def _deepgram_analyze(transcript: str) -> dict:
         logger.warning("DEEPGRAM_API_KEY not set — skipping Deepgram analysis")
         return {}
     
-    # Add context prefix so Deepgram understands the roles
+    # Context prefix so Deepgram understands the conversation structure
+    # (not included in summary output — it's just for parsing guidance)
     context_prefix = (
-        "The following is a transcript of a wellness check-in phone call "
-        "between Clara (an AI companion) and an elderly patient. "
-        "Summarize what the PATIENT discussed, their mood, and key topics.\n\n"
+        "The following is a transcript of a wellness phone call with an elderly adult. "
+        "Summarize only what the PATIENT said: their mood, what they talked about, "
+        "and anything noteworthy. Write in third person, concisely, as if briefing a family member.\n\n"
     )
     transcript_for_analysis = context_prefix + transcript
     
@@ -133,10 +134,15 @@ async def _deepgram_analyze(transcript: str) -> dict:
             summary_info = results.get("summary") or {}
             summary = summary_info.get("text", "")
             
-            # Post-process: replace generic "customer" with context-aware text
-            for generic in ["a customer", "A customer", "the customer", "The customer",
-                            "a caller", "A caller", "the caller", "The caller"]:
-                summary = summary.replace(generic, "the patient")
+            # Post-process: strip out any persona references that crept in
+            for generic in [
+                "a customer", "A customer", "the customer", "The customer",
+                "a caller", "A caller", "the caller", "The caller",
+                "Clara (an AI companion)", "an AI companion", "Clara",
+                "the AI", "an AI",
+            ]:
+                summary = summary.replace(generic, "she").replace("  ", " ").strip()
+            summary = summary.replace("She and she", "She")
             
             # Extract topics
             topics_data = results.get("topics", {}).get("segments", [])
@@ -254,10 +260,12 @@ def _merge_analysis(dg: dict, care: dict, transcript: str) -> dict:
     
     if safety_flags:
         mood = "distressed"
-        mood_explanation = f"Safety concerns detected: {safety_flags[0][:80]}"
+        mood_explanation = (
+            "She said something during the call that raises a safety concern and needs your attention right away."
+        )
     elif loneliness:
         mood = "sad"
-        mood_explanation = f"Loneliness expressed: {loneliness[0][:80]}"
+        mood_explanation = "She expressed feelings of loneliness or missing people she loves."
     else:
         dg_sentiment = dg.get("sentiment", "neutral")
         mood_map = {
@@ -267,7 +275,8 @@ def _merge_analysis(dg: dict, care: dict, transcript: str) -> dict:
         }
         mood = mood_map.get(dg_sentiment, "neutral")
         score = dg.get("sentiment_score", 0)
-        mood_explanation = f"Overall sentiment: {dg_sentiment} (score: {score:.2f})"
+        mood_map_label = {"positive": "upbeat and positive", "negative": "low or subdued", "neutral": "calm and neutral"}
+        mood_explanation = f"Her overall tone during the call felt {mood_map_label.get(dg_sentiment, 'neutral')}."
     
     # Topics: merge Deepgram topics with our detected signals
     topics = dg.get("topics", [])

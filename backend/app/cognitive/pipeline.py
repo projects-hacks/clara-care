@@ -262,63 +262,81 @@ class CognitivePipeline:
     def _extract_highlights(self, summary: str, analysis: Optional[dict] = None, metrics: Optional[dict] = None) -> list[str]:
         """
         Extract key highlights from conversation summary and analysis data.
-        Builds rich highlights using actual data instead of just splitting summary text.
+        All text must be plain English, suitable for a non-medical family member.
         """
         highlights = []
-        
-        # 1. Use cleaned summary as first highlight
+
+        # 1. Use the summary as the first highlight — clean it up
         if summary and len(summary) > 10:
-            # Clean up and capitalize
             clean = summary.strip()
-            if not clean.endswith(('.', '!', '?')):
+            # Strip any system/prompt preamble that leaked through
+            for noise in [
+                "A wellness check-in phone call between Clara",
+                "between Clara (an AI companion)",
+                "Summarizing the call,",
+                "an AI companion",
+            ]:
+                clean = clean.replace(noise, "").strip()
+            if clean and not clean.endswith(('.', '!', '?')):
                 clean += '.'
-            highlights.append(clean)
-        
-        # 2. Add mood context from analysis
+            if len(clean) > 15:
+                highlights.append(clean)
+
+        # 2. Mood explanation (already plain-English after post_call_analyzer fix)
         if analysis:
             mood_explanation = analysis.get("mood_explanation", "")
-            if mood_explanation:
+            # Skip if it still looks technical (fallback guard)
+            if mood_explanation and "score:" not in mood_explanation and "sentiment:" not in mood_explanation.lower():
                 highlights.append(mood_explanation)
-            
-            # 3. Add medication info
+
+            # 3. Safety concern — warm, not technical
+            safety_flags = analysis.get("safety_flags", [])
+            if safety_flags:
+                highlights.append(
+                    "⚠️ She said something during this call that is a cause for concern. "
+                    "Please review the alert and consider reaching out to her soon."
+                )
+
+            # 4. Medication info
             med_status = analysis.get("medication_status", {})
             if med_status.get("discussed"):
                 notes = med_status.get("notes", "")
                 if notes:
-                    highlights.append(f"Medication discussed: {notes}")
+                    highlights.append(f"Medication update: {notes}")
                 else:
-                    highlights.append("Medication was discussed during the call.")
-            
-            # 4. Add engagement level
+                    highlights.append("Medication was briefly mentioned during the call.")
+
+            # 5. Engagement level
             engagement = analysis.get("engagement_level", "")
-            if engagement:
-                engagement_text = {
-                    "high": "Patient was highly engaged and talkative.",
-                    "medium": "Patient had moderate engagement during the call.",
-                    "low": "Patient was quieter than usual during the call."
-                }
-                highlights.append(engagement_text.get(engagement, f"Engagement level: {engagement}."))
-            
-            # 5. Add action items
-            action_items = analysis.get("action_items", [])
-            for item in action_items[:2]:
-                highlights.append(f"Action needed: {item}")
-            
-            # 6. Add memory concern if detected
+            engagement_text = {
+                "high": "She was chatty and engaged throughout the call — a great sign.",
+                "medium": "She had a comfortable, relaxed conversation today.",
+                "low": "She was quieter than usual. A follow-up check-in might be helpful.",
+            }
+            if engagement and engagement in engagement_text:
+                highlights.append(engagement_text[engagement])
+
+            # 6. Memory inconsistency — plain language
             memory_flags = analysis.get("memory_inconsistency", [])
             if memory_flags:
-                highlights.append("⚠️ Memory inconsistency detected during conversation.")
-        
-        # 7. Add coherence info from metrics
+                highlights.append(
+                    "⚠️ She gave some conflicting answers during the conversation. "
+                    "This can sometimes be an early sign of short-term memory changes and is worth watching."
+                )
+
+        # 7. Low coherence — plain language, no raw number
         if metrics:
             coherence = metrics.get("topic_coherence")
             if coherence is not None and coherence < 0.40:
-                highlights.append(f"⚠️ Low conversation coherence ({coherence:.2f}) — may indicate confusion.")
-        
-        # Fallback if nothing found
+                highlights.append(
+                    "⚠️ Today's conversation was harder to follow than usual — she jumped between topics "
+                    "and had difficulty staying on one thread. This may be worth a gentle check-in."
+                )
+
+        # Fallback
         if not highlights:
             highlights = [summary] if summary else ["Brief check-in call."]
-        
+
         return highlights[:5]
     
     def _generate_recommendations(
@@ -327,51 +345,62 @@ class CognitivePipeline:
         baseline: Optional[dict]
     ) -> list[str]:
         """
-        Generate recommendations based on metrics and baseline.
-        Provides early recommendations even without baseline for new patients.
+        Generate suggested actions the FAMILY MEMBER can take.
+        Every item must be something the family member can actually do —
+        call her, visit, talk to her doctor, etc.
+        Nothing that requires controlling the environment or the call.
         """
         recommendations = []
-        
-        # ── Early recommendations (no baseline needed) ───────────────────
-        # Low coherence warning
+
         coherence = metrics.get("topic_coherence")
+        word_pauses = metrics.get("word_finding_pauses", 0)
+        repetition = metrics.get("repetition_rate", 0)
+
+        # Low coherence — family should reach out personally
         if coherence is not None and coherence < 0.40:
             recommendations.append(
-                "Conversation coherence was low. Ensure adequate rest and a calm environment for calls."
+                "Consider giving her a call yourself today — a familiar voice can help when "
+                "she's having a harder time expressing herself."
             )
-        
-        # Word-finding pauses
-        if metrics.get("word_finding_pauses", 0) > 3:
+
+        # Word-finding difficulty — worth flagging to doctor if persistent
+        if word_pauses > 3:
             recommendations.append(
-                "Several word-finding pauses were noted. Monitor for patterns and consider mentioning to their doctor."
+                "If you notice this pattern continuing over the next few days, "
+                "mention it at her next doctor's appointment."
             )
-        
-        # High repetition
-        if metrics.get("repetition_rate", 0) > 0.1:
+
+        # High repetition — redirect with engagement
+        if repetition > 0.1:
             recommendations.append(
-                "Some repetition was detected. Continue monitoring in upcoming conversations."
+                "Try calling her and asking about a specific memory or activity she enjoys — "
+                "fresh topics can help break repetitive patterns."
             )
-        
-        # ── Baseline-based recommendations (need 7+ conversations) ──────
+
+        # Baseline-based
         if baseline and baseline.get("established"):
-            # Check vocabulary diversity
             if metrics.get("vocabulary_diversity") is not None and baseline.get("vocabulary_diversity"):
-                vocab_dev = ((metrics["vocabulary_diversity"] - baseline["vocabulary_diversity"]) 
-                             / baseline["vocabulary_diversity"] * 100)
+                vocab_dev = (
+                    (metrics["vocabulary_diversity"] - baseline["vocabulary_diversity"])
+                    / baseline["vocabulary_diversity"] * 100
+                )
                 if vocab_dev < -15:
                     recommendations.append(
-                        "Vocabulary diversity has decreased compared to baseline. Consider word games or varied topics."
+                        "Her language felt more limited than usual. A visit or call with "
+                        "richer conversation — stories, photos, news — could help stimulate her."
                     )
-            
-            # Check coherence vs baseline
+
             if coherence is not None and baseline.get("topic_coherence"):
-                coherence_dev = ((coherence - baseline["topic_coherence"]) 
-                                / baseline["topic_coherence"] * 100)
+                coherence_dev = (
+                    (coherence - baseline["topic_coherence"])
+                    / baseline["topic_coherence"] * 100
+                )
                 if coherence_dev < -15:
                     recommendations.append(
-                        "Conversation coherence has declined compared to baseline. Monitor closely."
+                        "This pattern has lasted a few conversations — it may be worth "
+                        "bringing up at her next doctor visit."
                     )
-        
+
         return recommendations
     
     async def _send_digest_notification(self, patient_id: str, digest: dict) -> None:

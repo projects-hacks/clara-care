@@ -73,11 +73,13 @@ export interface Alert {
   alert_type: string
   severity: 'low' | 'medium' | 'high'
   description: string
+  suggested_action?: string
   acknowledged: boolean
   acknowledged_by: string | null
   timestamp: string
   conversation_id?: string
 }
+
 
 export interface WellnessDigest {
   id: string

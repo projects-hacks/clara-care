@@ -193,7 +193,7 @@ async def test_acknowledge_alert_nonexistent(alert_engine):
 
 @pytest.mark.asyncio
 async def test_alert_description_generation(alert_engine):
-    """Test alert description is human-readable"""
+    """Test alert description is plain-English (no raw numbers or technical jargon)"""
     deviation = {
         "metric_name": "vocabulary_diversity",
         "current_value": 0.45,
@@ -205,11 +205,14 @@ async def test_alert_description_generation(alert_engine):
 
     description = alert_engine._generate_alert_description(deviation)
 
-    # Should mention the metric and direction
-    assert "Vocabulary diversity" in description
-    assert "declined" in description
-    assert "30.8%" in description
-    assert "3 consecutive" in description
+    # Should be plain English — no raw numbers or metric names
+    assert "%" not in description, "Description must not contain raw percentage values"
+    assert "vocabulary_diversity" not in description, "Description must not expose metric keys"
+    assert "baseline" not in description.lower(), "Description must not mention 'baseline'"
+    # Should be meaningful and informative
+    assert len(description) > 30
+    # Should mention the pattern duration
+    assert "3 conversations" in description or "last 3" in description
 
 
 @pytest.mark.asyncio

@@ -89,15 +89,76 @@ export function cognitiveScoreBg(score: number): string {
 
 export function alertTypeLabel(alertType: string): string {
   const map: Record<string, string> = {
-    word_finding_difficulty: 'Word Finding Difficulty',
-    repetition_increase: 'Repetition Increase',
-    vocabulary_decline: 'Vocabulary Decline',
-    mood_distress: 'Mood Distress',
-    response_latency: 'Response Latency',
-    coherence_drop: 'Coherence Drop',
+    word_finding_difficulty: 'Struggling to Find Words',
+    repetition_increase: 'Repeating Stories or Phrases',
+    vocabulary_decline: 'Using Fewer Words Than Usual',
+    vocabulary_shrinkage: 'Using Fewer Words Than Usual',
+    mood_distress: 'Signs of Distress',
+    distress: 'Signs of Distress',
+    response_latency: 'Slower to Respond',
+    response_delay: 'Slower to Respond',
+    coherence_drop: 'Conversations Harder to Follow',
+    cognitive_decline: 'Change in Conversation Pattern',
+    confusion_detected: 'Signs of Confusion',
+    emergency: 'Emergency Alert',
+    fall: 'Possible Fall Detected',
   }
   return map[alertType] ?? alertType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
+
+export function alertIcon(alertType: string): string {
+  const map: Record<string, string> = {
+    word_finding_difficulty: '💬',
+    repetition_increase: '🔁',
+    vocabulary_decline: '📉',
+    vocabulary_shrinkage: '📉',
+    mood_distress: '😰',
+    distress: '😰',
+    response_latency: '⏱️',
+    response_delay: '⏱️',
+    coherence_drop: '🧩',
+    cognitive_decline: '🧠',
+    confusion_detected: '❓',
+    emergency: '🚨',
+    fall: '⚠️',
+  }
+  return map[alertType] ?? '🔔'
+}
+
+export function alertSuggestedAction(alertType: string, fallback?: string): string {
+  const map: Record<string, string> = {
+    word_finding_difficulty:
+      "Call her and let the conversation flow at her pace. If this keeps happening, mention it to her doctor at the next visit.",
+    repetition_increase:
+      "Give her a ring and bring up something new — upcoming family plans, a shared memory, or something she is looking forward to.",
+    vocabulary_decline:
+      "Give her a call and chat about something she loves — a favourite memory, a family story, or what has been on her mind.",
+    vocabulary_shrinkage:
+      "Give her a call and chat about something she loves — a favourite memory, a family story, or what has been on her mind.",
+    mood_distress:
+      "Call her right away and let her know you are thinking of her. If she seems very distressed, consider arranging a visit.",
+    distress:
+      "Call her right away and let her know you are thinking of her. If she seems very distressed, consider arranging a visit or contacting her caregiver.",
+    response_latency:
+      "Check in with her — a short call to ask how she is feeling today goes a long way.",
+    response_delay:
+      "Check in with her — a short call to ask how she is feeling today goes a long way.",
+    coherence_drop:
+      "Call her yourself today. Keep it light and ask one thing at a time — a familiar voice makes a real difference.",
+    cognitive_decline:
+      "Bring this up at her next doctor appointment — mention the dates and what you have noticed.",
+    confusion_detected:
+      "Give her a reassuring call or, if possible, pop in for a visit. Let her doctor know if this is becoming more frequent.",
+    emergency:
+      "Call her immediately. If you cannot reach her, contact emergency services or her on-site caregiver.",
+    fall:
+      "Call her immediately to confirm she is safe. If you cannot reach her, contact her caregiver or a neighbour right away.",
+    social_connection:
+      "She is missing you. Give her a call or plan a visit — even just 10 minutes together means a lot.",
+  }
+  return map[alertType] ?? fallback ?? "Give her a call to check in, and mention this to her doctor if it keeps happening."
+}
+
 
 export function metricLabel(key: string): string {
   const map: Record<string, string> = {

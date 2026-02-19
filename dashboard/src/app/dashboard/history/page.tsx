@@ -43,10 +43,10 @@ export default function HistoryPage() {
 
   return (
     <>
-      <TopBar title="Conversation History" />
+      <TopBar title="Conversation History" subtitle="Browse what Clara talked about" />
 
       <div className="overflow-x-auto px-4 pt-3">
-        <div className="flex gap-2">
+        <div className="flex gap-2 pb-1">
           {MOOD_FILTERS.map((filter) => (
             <button
               key={filter}
@@ -63,9 +63,17 @@ export default function HistoryPage() {
             </button>
           ))}
         </div>
-      </div>
+        </div>
 
-      <main className="px-4 py-3">
+        <main className="space-y-3 px-4 py-3">
+          {conversations.length > 0 && !loading && !error && (
+            <section className="rounded-2xl bg-white p-3 shadow-sm" aria-label="History summary">
+              <p className="text-xs text-gray-600">
+                You have <span className="font-semibold text-gray-900">{conversations.length}</span> recorded
+                conversations. Use the filters above to jump to calls by mood.
+              </p>
+            </section>
+          )}
         {loading && <LoadingSpinner />}
 
         {error && (

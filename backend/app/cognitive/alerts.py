@@ -95,6 +95,7 @@ class AlertEngine:
         
         # Generate description
         description = self._generate_alert_description(deviation)
+        suggested_action = self._get_suggested_action(alert_type)
         
         # Create alert dict
         alert = {
@@ -103,6 +104,7 @@ class AlertEngine:
             "alert_type": alert_type,
             "severity": deviation["severity"],
             "description": description,
+            "suggested_action": suggested_action,
             "related_metrics": {
                 "metric_name": metric_name,
                 "current_value": deviation["current_value"],
@@ -121,31 +123,111 @@ class AlertEngine:
         logger.warning(f"Alert created: {alert_type} ({deviation['severity']}) for patient {patient_id}")
         
         return alert
+
     
     def _generate_alert_description(self, deviation: dict) -> str:
-        """Generate human-readable alert description"""
+        """Generate plain-English alert description for family members — no jargon or raw numbers."""
         metric_name = deviation["metric_name"]
-        dev_percent = abs(deviation["deviation_percent"])
         consecutive = deviation["consecutive_count"]
-        
-        metric_labels = {
-            "vocabulary_diversity": "Vocabulary diversity",
-            "topic_coherence": "Topic coherence",
-            "repetition_rate": "Repetition rate",
-            "word_finding_pauses": "Word-finding pauses",
-            "response_latency": "Response latency"
+        severity = deviation.get("severity", "medium")
+
+        # Human-readable severity qualifier
+        severity_qualifier = {
+            "low": "a small",
+            "medium": "a noticeable",
+            "high": "a significant",
+        }.get(severity, "a")
+
+        # How many conversations back the pattern spans
+        if consecutive <= 1:
+            pattern_phrase = "her most recent conversation"
+        elif consecutive == 2:
+            pattern_phrase = "the last 2 conversations"
+        else:
+            pattern_phrase = f"the last {consecutive} conversations in a row"
+
+        descriptions = {
+            "vocabulary_diversity": (
+                f"She has been using a more limited range of words than usual across {pattern_phrase}. "
+                "This can sometimes happen when someone is feeling tired, stressed, or experiencing subtle memory changes. "
+                "It's worth keeping an eye on."
+            ),
+            "topic_coherence": (
+                f"Her conversations have been harder to follow than usual across {pattern_phrase}. "
+                "She may be jumping between topics or losing the thread of what she was saying more than is typical for her. "
+                "This can indicate moments of confusion or difficulty concentrating."
+            ),
+            "repetition_rate": (
+                f"She has been repeating certain stories or phrases more often than usual across {pattern_phrase}. "
+                "Repetition can sometimes be a sign of something on her mind, or it may reflect short-term memory changes worth watching."
+            ),
+            "word_finding_pauses": (
+                f"She has been stopping more often to search for words during {pattern_phrase}. "
+                "You might notice phrases like \"um,\" \"you know,\" or sentences that trail off. "
+                "While this can be normal with age, the increase compared to her usual pattern is worth noting."
+            ),
+            "response_latency": (
+                f"She has been taking longer than usual to respond in conversations across {pattern_phrase}. "
+                "This can be a sign of fatigue, reduced concentration, or difficulty processing what was said."
+            ),
         }
-        
-        label = metric_labels.get(metric_name, metric_name.replace("_", " ").title())
-        
-        direction = "declined" if deviation["deviation_percent"] < 0 else "increased"
-        
-        description = (
-            f"{label} has {direction} by {dev_percent:.1f}% over the last "
-            f"{consecutive} consecutive conversations"
+
+        return descriptions.get(
+            metric_name,
+            (
+                f"We noticed {severity_qualifier} change in her conversation patterns across {pattern_phrase}. "
+                "This may be worth monitoring."
+            ),
         )
-        
-        return description
+
+    def _get_suggested_action(self, alert_type: str) -> str:
+        """Return a concrete action the FAMILY MEMBER can take for this alert type."""
+        actions = {
+            "vocabulary_shrinkage": (
+                "Give her a call and chat about something she loves — "
+                "a favourite memory, a family story, or what's been on her mind."
+            ),
+            "coherence_drop": (
+                "Call her yourself today. Keep the conversation light and ask one thing at a time — "
+                "a familiar voice makes a real difference."
+            ),
+            "repetition_increase": (
+                "Give her a ring and introduce a new topic like upcoming family plans or a shared memory — "
+                "it gives her something fresh to talk about."
+            ),
+            "word_finding_difficulty": (
+                "Call her and let the conversation flow at her pace. "
+                "If this keeps happening, mention it to her doctor at the next visit."
+            ),
+            "response_delay": (
+                "Check in with her — a short call to ask how she's feeling today goes a long way."
+            ),
+            "distress": (
+                "Call her right away and let her know you're thinking of her. "
+                "If she seems very distressed, consider arranging a visit or contacting her caregiver."
+            ),
+            "confusion_detected": (
+                "Give her a reassuring call or, if possible, pop in for a visit. "
+                "Let her doctor know if this is becoming more frequent."
+            ),
+            "fall": (
+                "Call her immediately to confirm she is safe. "
+                "If you can't reach her, contact her caregiver or a neighbour right away."
+            ),
+            "emergency": (
+                "Call her immediately. If you can't reach her, contact emergency services or her on-site caregiver."
+            ),
+            "cognitive_decline": (
+                "Bring this up at her next doctor's appointment — mention the dates and what you noticed."
+            ),
+            "social_connection": (
+                "She's missing you. Give her a call or plan a visit soon — even just 10 minutes together means a lot."
+            ),
+        }
+        return actions.get(
+            alert_type,
+            "Give her a call to check in, and mention this to her doctor if it keeps happening."
+        )
     
     async def create_realtime_alert(
         self,
@@ -174,6 +256,7 @@ class AlertEngine:
             "alert_type": alert_type,
             "severity": severity,
             "description": message,
+            "suggested_action": self._get_suggested_action(alert_type),
             "related_metrics": context,
             "timestamp": datetime.now(UTC).isoformat(),
             "acknowledged": False
@@ -190,6 +273,7 @@ class AlertEngine:
             await self._dispatch_notifications(patient_id, [alert])
         
         return alert
+
     
     async def _dispatch_notifications(self, patient_id: str, alerts: list[dict]) -> None:
         """

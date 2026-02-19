@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Phone, PhoneCall, PhoneOff, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Phone, PhoneCall, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { callPatient } from '@/lib/api'
 import { cn } from '@/lib/utils'
 

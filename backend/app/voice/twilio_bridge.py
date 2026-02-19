@@ -295,7 +295,12 @@ class TwilioCallSession:
                             "patient_id": self.patient_id,
                             "severity": "medium",
                             "alert_type": "cognitive_decline",
-                            "message": f"Memory inconsistency detected: {memory_flags[0][:200]}"
+                            "message": (
+                                "During today's call, she gave conflicting answers to the same question — "
+                                "first agreeing, then expressing doubt or saying the opposite. "
+                                "This kind of inconsistency can sometimes be an early sign of short-term "
+                                "memory difficulty and is worth watching over the coming conversations."
+                            )
                         }
                     )
                 
@@ -327,7 +332,12 @@ class TwilioCallSession:
                                 "patient_id": self.patient_id,
                                 "severity": "medium",
                                 "alert_type": "coherence_drop",
-                                "message": f"Low topic coherence detected ({coherence:.2f}). Conversation may indicate confusion or disorientation."
+                                "message": (
+                                    "Today's conversation was noticeably harder to follow than usual. "
+                                    "She jumped between topics frequently and had difficulty staying on the same thread. "
+                                    "This can be a sign of confusion or difficulty concentrating, "
+                                    "and may be worth checking in about."
+                                )
                             }
                         )
                 
@@ -375,9 +385,16 @@ class TwilioCallSession:
             if safety_flags:
                 flag_summary = "; ".join(safety_flags[:3])
                 action_items = analysis.get("action_items", [])
-                action_text = " Action needed: " + "; ".join(action_items) if action_items else ""
+                action_text = (
+                    " Suggested next steps: " + "; ".join(action_items)
+                    if action_items else ""
+                )
                 
-                message = f"During today's call, concerning statements were detected: {flag_summary}.{action_text}"
+                message = (
+                    f"She said something during today's call that is a cause for concern: {flag_summary}. "
+                    "This came up during an otherwise normal conversation and may need your immediate attention."
+                    f"{action_text}"
+                )
                 
                 logger.warning(
                     f"[SAFETY_ALERT] CallSid={self.call_sid} patient={self.patient_id} "
@@ -391,15 +408,19 @@ class TwilioCallSession:
                         "severity": "high",
                         "alert_type": "distress",
                         "related_metrics": ["safety_flags"],
-                        "description": message  # 'message' param mapped to 'description' in trigger_alert
+                        "description": message
                     }
                 )
                 logger.info(f"[SAFETY_ALERT_CREATED] CallSid={self.call_sid}")
 
             # 2. Handle Desire to Connect (Medium Severity Opportunity)
             if analysis.get("desire_to_connect"):
-                context = analysis.get("connection_context", "the patient asked about family")
-                message = f"Values a connection: {context}. Good opportunity to reach out."
+                context = analysis.get("connection_context", "she mentioned missing family")
+                message = (
+                    f"She seemed to be longing for more connection during today's call — {context}. "
+                    "This is a good moment to reach out with a call or visit. "
+                    "Even a short check-in can make a big difference."
+                )
                 
                 logger.info(f"[CONNECTION_ALERT] CallSid={self.call_sid} context={context}")
                 

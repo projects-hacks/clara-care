@@ -51,6 +51,34 @@ function useCounter(end: number, duration = 2000) {
     return { count, ref }
 }
 
+function StatCounterItem({
+    end,
+    suffix,
+    label,
+    icon: Icon,
+}: {
+    end: number
+    suffix: string
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+}) {
+    const { count, ref } = useCounter(end)
+    return (
+        <div ref={ref} className="flex items-center gap-3 text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                <Icon className="h-5 w-5" />
+            </div>
+            <div>
+                <p className="text-2xl font-bold">
+                    {count}
+                    {suffix}
+                </p>
+                <p className="text-xs text-blue-200">{label}</p>
+            </div>
+        </div>
+    )
+}
+
 /* ──────────────────────────────────────────────
    Fade-in-on-scroll wrapper
    ────────────────────────────────────────────── */
@@ -220,23 +248,15 @@ export default function LandingPage() {
                             { end: 100, suffix: '%', label: 'NLP Accuracy', icon: Activity },
                             { end: 30, suffix: 's', label: 'Alert Response Time', icon: Bell },
                         ] as const
-                    ).map((stat, i) => {
-                        const { count, ref } = useCounter(stat.end)
-                        return (
-                            <div key={i} ref={ref} className="flex items-center gap-3 text-white">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
-                                    <stat.icon className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <p className="text-2xl font-bold">
-                                        {count}
-                                        {stat.suffix}
-                                    </p>
-                                    <p className="text-xs text-blue-200">{stat.label}</p>
-                                </div>
-                            </div>
-                        )
-                    })}
+                    ).map((stat, i) => (
+                        <StatCounterItem
+                            key={i}
+                            end={stat.end}
+                            suffix={stat.suffix}
+                            label={stat.label}
+                            icon={stat.icon}
+                        />
+                    ))}
                 </div>
             </section>
 

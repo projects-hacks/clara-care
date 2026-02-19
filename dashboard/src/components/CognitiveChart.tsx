@@ -48,7 +48,7 @@ export default function CognitiveChart({
     .filter((d) => d.value !== null && d.value !== undefined)
 
   return (
-    <div>
+    <div aria-hidden={filtered.length === 0}>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={filtered} margin={{ top: 4, right: 8, bottom: 4, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
