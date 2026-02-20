@@ -499,7 +499,7 @@ def _validate_summary_grounding(summary: str, transcript: str, patient_name: str
 
 def _build_safe_summary(transcript: str, patient_name: str = "") -> str:
     """
-    Build a minimal, honest summary directly from patient utterances.
+    Build an enriched, honest summary directly from patient utterances.
     Used as a fallback when Deepgram's summary is hallucinated.
     Format: 'Clara and {name} discussed...' / '{name} mentioned...'
     """
@@ -509,74 +509,120 @@ def _build_safe_summary(transcript: str, patient_name: str = "") -> str:
     if not patient_text or len(patient_text.strip()) < 10:
         return f"Clara and {name} had a brief check-in call."
     
-    # Extract key topics from what the patient actually said
     patient_lower = patient_text.lower()
-    discussed_topics = []  # Things they discussed together
-    patient_feelings = []  # How the patient was feeling
-    patient_actions = []   # What the patient mentioned doing
+    word_count = len(patient_text.split())
+    
+    # ---------- Categorized keyword extraction ----------
+    feelings = []
+    topics = []
+    activities = []    # What the patient did or plans to do
+    requests = []      # What they asked Clara for help with
     
     # Feelings
-    feeling_keywords = {
-        "good": "feeling good",
-        "well": "feeling well",
-        "happy": "feeling happy",
-        "better": "feeling better",
-        "tired": "feeling tired",
-        "lonely": "feeling lonely",
-        "sad": "feeling sad",
-        "okay": "doing okay",
+    feeling_map = {
+        "good": "feeling good", "well": "feeling well", "happy": "feeling happy",
+        "better": "feeling better", "great": "feeling great",
+        "tired": "feeling a bit tired", "lonely": "feeling lonely",
+        "sad": "feeling down", "okay": "doing okay", "fine": "doing fine",
     }
-    for keyword, desc in feeling_keywords.items():
-        if keyword in patient_lower and desc not in patient_feelings:
-            patient_feelings.append(desc)
+    for kw, desc in feeling_map.items():
+        if kw in patient_lower and desc not in feelings:
+            feelings.append(desc)
+    
+    # Activities (things patient did / is doing / plans to do)
+    activity_map = {
+        "reading": "has been reading",
+        "book": "has been enjoying a book",
+        "sci fi": "is into science fiction",
+        "sci-fi": "is into science fiction",
+        "walk": "went for a walk",
+        "garden": "has been gardening",
+        "cook": "did some cooking",
+        "bake": "did some baking",
+        "church": "went to church",
+        "shop": "went shopping",
+        "visit": "had visitors",
+        "watch": "watched something",
+        "exercise": "has been keeping active",
+        "yoga": "has been doing yoga",
+        "paint": "has been painting",
+        "knit": "has been knitting",
+        "puzzle": "worked on a puzzle",
+        "school": "keeps herself busy",
+    }
+    for kw, desc in activity_map.items():
+        if kw in patient_lower and desc not in activities:
+            activities.append(desc)
+    
+    # Requests (what they asked Clara to help with)
+    request_map = {
+        "recommend": "asked Clara for recommendations",
+        "suggest": "asked Clara for suggestions",
+        "restaurant": "looked for restaurant options together",
+        "weather": "checked the weather forecast with Clara",
+        "find": "asked Clara to help find something",
+        "search": "asked Clara to look something up",
+        "tell me": "asked Clara for information",
+    }
+    for kw, desc in request_map.items():
+        if kw in patient_lower and desc not in requests:
+            requests.append(desc)
     
     # Discussion topics
-    topic_keywords = {
-        "lunch": "lunch plans",
-        "dinner": "dinner plans",
-        "restaurant": "finding a restaurant",
-        "friend": "meeting with friends",
-        "daughter": "her daughter",
-        "son": "her son",
-        "family": "family",
-        "doctor": "talking to her doctor",
-        "sleep": "how she slept",
-        "weather": "the weather",
-        "medication": "medication",
-        "medicine": "medication",
-        "walk": "going for a walk",
-        "garden": "gardening",
-        "cook": "cooking",
-        "pain": "pain",
-        "work": "things to do",
-        "call": "wanting to connect with family",
-        "miss": "missing someone",
-        "quesadilla": "food preferences",
-        "mexican": "Mexican food",
-        "chicken": "food preferences",
+    topic_map = {
+        "lunch": "lunch plans", "dinner": "dinner plans",
+        "breakfast": "morning routine", "restaurant": "dining options",
+        "friend": "friends", "daughter": "her daughter", "son": "her son",
+        "grandchild": "her grandchildren", "family": "family",
+        "doctor": "a doctor visit", "appointment": "an upcoming appointment",
+        "sleep": "sleep", "slept": "how she slept",
+        "medication": "medication", "medicine": "her medication",
+        "weather": "the weather", "rain": "the weather", "sun": "the weather",
+        "pain": "some discomfort", "headache": "a headache",
+        "miss": "missing someone close",
+        "mexican": "Mexican food", "italian": "Italian food",
+        "music": "music", "song": "music",
+        "movie": "movies", "show": "a TV show",
+        "fine dining": "fine dining",
     }
-    for keyword, desc in topic_keywords.items():
-        if keyword in patient_lower and desc not in discussed_topics:
-            discussed_topics.append(desc)
+    for kw, desc in topic_map.items():
+        if kw in patient_lower and desc not in topics:
+            topics.append(desc)
     
-    # Build the summary
+    # ---------- Build the narrative ----------
     parts = []
     
-    if discussed_topics:
-        topics_str = ", ".join(discussed_topics[:3])
-        parts.append(f"Clara and {name} discussed {topics_str}")
+    # Opening: what they discussed
+    if topics:
+        topics_str = ", ".join(topics[:4])
+        parts.append(f"Clara and {name} chatted about {topics_str}")
     
-    if patient_feelings:
-        feeling = patient_feelings[0]
-        parts.append(f"{name} was {feeling}")
+    # Activities
+    if activities:
+        act = activities[0]
+        parts.append(f"{name} shared that she {act}")
+    
+    # Requests
+    if requests:
+        req = requests[0]
+        parts.append(f"They {req}")
+    
+    # Feelings + engagement
+    if feelings:
+        parts.append(f"Overall, {name} was {feelings[0]}")
     
     if parts:
-        return ". ".join(parts) + "."
+        summary = ". ".join(parts) + "."
+        # Add engagement colour
+        if word_count > 80:
+            summary += f" She was chatty and engaged throughout the call."
+        elif word_count > 40:
+            summary += f" The conversation had a comfortable, natural flow."
+        return summary
     
     # Ultra-safe fallback
-    word_count = len(patient_text.split())
     if word_count > 50:
-        return f"Clara and {name} had an engaged conversation during today's check-in."
+        return f"Clara and {name} had an engaged conversation during today's check-in. She seemed comfortable and willing to chat."
     return f"Clara and {name} had a brief check-in call."
 
 
