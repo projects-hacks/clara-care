@@ -2,6 +2,8 @@
 
 > **Voice-First AI Companion for Cognitive Health Monitoring**
 
+<img width="1504" height="726" alt="Screenshot 2026-02-19 at 11 28 55 pm" src="https://github.com/user-attachments/assets/77cb7407-ae14-4ae6-ab6b-57d85cd32184" />
+
 ClaraCare is an AI voice agent that calls elderly individuals daily to check in, detects early signs of cognitive decline through natural conversation, and keeps families informed.
 
 ## 🚀 Key Features
@@ -69,6 +71,3 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 - **Brain**: OpenAI GPT-4o with "Clara" system prompt.
 - **Tools**: `functions.py` handles external API calls (You.com, Sanity, Alerts).
 - **Database**: Sanity CMS for structured content.
-
-## License
-MIT
