@@ -94,6 +94,7 @@ class ReportGenerator:
 
             # Conversation summary
             "total_conversations": len(conversations),
+            "conversations": conversations[:5],
 
             # Recommendations
             "recommendations": self._generate_recommendations(trends, alerts, baseline),
@@ -140,11 +141,28 @@ class ReportGenerator:
         trend_arrow = {"improving": "↑", "stable": "→", "declining": "↓"}.get(trend, "–")
         trend_color = {"improving": "#22c55e", "stable": "#6b7280", "declining": "#ef4444"}.get(trend, "#6b7280")
 
+        # Human-readable alert type names
+        _alert_type_labels = {
+            "coherence_drop": "Coherence Drop",
+            "cognitive_decline": "Cognitive Decline",
+            "vocabulary_decline": "Vocabulary Decline",
+            "repetition_increase": "Repetition Increase",
+            "memory_inconsistency": "Memory Inconsistency",
+            "distress": "Distress",
+            "fall": "Fall Risk",
+            "confusion": "Confusion",
+            "pain": "Pain Report",
+            "social_connection": "Wants Family Contact",
+        }
+
         # Build alerts rows
         alert_rows = ""
         for a in data.get("alerts", [])[:5]:
             sev = a.get("severity", "low")
             sev_color = {"high": "#ef4444", "medium": "#f59e0b", "low": "#3b82f6"}.get(sev, "#6b7280")
+            raw_type = a.get('alert_type', '')
+            friendly_type = _alert_type_labels.get(raw_type, raw_type.replace('_', ' ').title())
+            alert_date = a.get('timestamp', a.get('created_at', ''))[:10]
             alert_rows += f"""
             <tr>
                 <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">
@@ -152,14 +170,34 @@ class ReportGenerator:
                                  background:{sev_color};margin-right:6px;"></span>
                     {sev.capitalize()}
                 </td>
-                <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{a.get('alert_type','')}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{friendly_type}</td>
                 <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;">
-                    {a.get('description','')[:80]}
+                    {a.get('description','')}
+                </td>
+                <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#9ca3af;font-size:11px;white-space:nowrap;">
+                    {alert_date}
                 </td>
             </tr>"""
 
         if not alert_rows:
-            alert_rows = '<tr><td colspan="3" style="padding:12px;color:#9ca3af;text-align:center;">No alerts in this period</td></tr>'
+            alert_rows = '<tr><td colspan="4" style="padding:12px;color:#9ca3af;text-align:center;">No alerts in this period</td></tr>'
+
+        # Build conversation rows
+        convo_rows = ""
+        for c in data.get("conversations", []):
+            date_str = c.get("timestamp", "")[:10]
+            mood = c.get("detected_mood", "Neutral").capitalize()
+            summary = c.get("summary", "")
+            duration = f"{c.get('duration', 0)//60}m" if c.get('duration') else "-"
+            convo_rows += f"""
+            <tr style="page-break-inside:avoid;">
+                <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;white-space:nowrap;">{date_str}<br><span style="color:#9ca3af;font-size:11px;">{duration}</span></td>
+                <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{mood}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;">{summary}</td>
+            </tr>"""
+
+        if not convo_rows:
+            convo_rows = '<tr><td colspan="3" style="padding:12px;color:#9ca3af;text-align:center;">No recent conversations</td></tr>'
 
         # Build recommendations list
         recs = data.get("recommendations", "")
@@ -177,6 +215,7 @@ class ReportGenerator:
     <meta charset="UTF-8">
     <title>ClaraCare Cognitive Health Report</title>
     <style>
+        @page {{ size: letter; margin: 20mm; }}
         * {{ margin:0; padding:0; box-sizing:border-box; }}
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -184,7 +223,7 @@ class ReportGenerator:
             background: #ffffff;
             line-height: 1.5;
         }}
-        .container {{ max-width: 700px; margin: 0 auto; padding: 40px 32px; }}
+        .container {{ max-width: 700px; margin: 0 auto; padding: 20px 32px; }}
         .header {{
             text-align: center;
             padding-bottom: 24px;
@@ -198,6 +237,7 @@ class ReportGenerator:
             border-radius: 8px;
             padding: 16px 20px;
             margin-bottom: 24px;
+            page-break-inside: avoid;
         }}
         .patient-name {{ font-size: 18px; font-weight: 600; }}
         .meta {{ font-size: 12px; color: #6b7280; }}
@@ -205,6 +245,7 @@ class ReportGenerator:
             display: flex;
             gap: 16px;
             margin-bottom: 24px;
+            page-break-inside: avoid;
         }}
         .score-card {{
             flex: 1;
@@ -215,7 +256,7 @@ class ReportGenerator:
         }}
         .score-value {{ font-size: 32px; font-weight: 700; }}
         .score-label {{ font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }}
-        .section {{ margin-bottom: 24px; }}
+        .section {{ margin-bottom: 32px; page-break-inside: avoid; }}
         .section-title {{
             font-size: 14px;
             font-weight: 600;
@@ -226,7 +267,7 @@ class ReportGenerator:
             padding-bottom: 6px;
             border-bottom: 1px solid #e5e7eb;
         }}
-        table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }}
         th {{
             text-align: left;
             padding: 8px 12px;
@@ -236,6 +277,8 @@ class ReportGenerator:
             text-transform: uppercase;
             color: #6b7280;
         }}
+        td {{ word-wrap: break-word; white-space: normal; }}
+        tr {{ page-break-inside: avoid; }}
         .recs {{ padding-left: 20px; font-size: 13px; color: #374151; }}
         .footer {{
             margin-top: 40px;
@@ -244,6 +287,7 @@ class ReportGenerator:
             text-align: center;
             font-size: 11px;
             color: #9ca3af;
+            page-break-inside: avoid;
         }}
     </style>
 </head>
@@ -257,7 +301,8 @@ class ReportGenerator:
         <div class="patient-info">
             <div class="patient-name">{data['patient_name']}</div>
             <div class="meta">
-                Report Date: {data['report_date']}
+                Age: {data.get('patient_age', 'Unknown')}
+                &nbsp;·&nbsp; Report Date: {data['report_date']}
                 &nbsp;·&nbsp; Period: Last {data['report_period_days']} days
                 &nbsp;·&nbsp; Conversations: {data['total_conversations']}
             </div>
@@ -287,37 +332,49 @@ class ReportGenerator:
             <div class="section-title">Cognitive Metrics</div>
             <table>
                 <tr>
-                    <th>Metric</th>
-                    <th>Current</th>
-                    <th>Baseline</th>
+                    <th style="width:40%">Metric</th>
+                    <th style="width:20%">Current</th>
+                    <th style="width:20%">Baseline</th>
+                    <th style="width:20%">Change</th>
                 </tr>
-                <tr>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">Vocabulary Diversity</td>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{data['avg_vocabulary']:.2f}</td>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{data['baseline_vocabulary']:.2f}</td>
-                </tr>
-                <tr>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">Topic Coherence</td>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{data['avg_coherence']:.2f}</td>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{data['baseline_coherence']:.2f}</td>
-                </tr>
-                <tr>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">Repetition Rate</td>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">{data['avg_repetition']:.2f}</td>
-                    <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">–</td>
-                </tr>
+                {self._metric_row('Vocabulary Diversity', data['avg_vocabulary'], data['baseline_vocabulary'], 'Uses a range of different words')}
+                {self._metric_row('Topic Coherence', data['avg_coherence'], data['baseline_coherence'], 'Stays on topic during conversation')}
+                {self._metric_row('Repetition Rate', data['avg_repetition'], None, 'Repeats phrases or questions', lower_is_better=True)}
             </table>
+        </div>
+
+        <div class="section" style="background:#f9fafb;border-radius:8px;padding:16px 20px;">
+            <div style="font-size:13px;font-weight:600;color:#7c3aed;margin-bottom:8px;">What These Metrics Mean</div>
+            <div style="font-size:12px;color:#6b7280;line-height:1.6;">
+                <strong>Vocabulary Diversity</strong> measures how many unique words are used. A decline may indicate word-finding difficulty.<br>
+                <strong>Topic Coherence</strong> tracks whether conversations stay on topic. Lower scores may suggest confusion or difficulty concentrating.<br>
+                <strong>Repetition Rate</strong> measures how often phrases are repeated. Higher rates can be an early sign of memory difficulty.<br>
+                <em>All metrics range from 0.0 to 1.0. Scores are compared against the patient's personal baseline, not a population average.</em>
+            </div>
         </div>
 
         <div class="section">
             <div class="section-title">Recent Alerts</div>
             <table>
                 <tr>
-                    <th>Severity</th>
-                    <th>Type</th>
-                    <th>Details</th>
+                    <th style="width:12%">Severity</th>
+                    <th style="width:20%">Type</th>
+                    <th style="width:53%">Details</th>
+                    <th style="width:15%">Date</th>
                 </tr>
                 {alert_rows}
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Recent Conversations</div>
+            <table>
+                <tr>
+                    <th style="width:20%">Date & Length</th>
+                    <th style="width:20%">Mood</th>
+                    <th style="width:60%">Summary</th>
+                </tr>
+                {convo_rows}
             </table>
         </div>
 
@@ -336,6 +393,45 @@ class ReportGenerator:
     </div>
 </body>
 </html>"""
+
+    # ── metric row helper ──────────────────────────────────────
+
+    def _metric_row(self, name: str, current: float, baseline: float | None,
+                    description: str, lower_is_better: bool = False) -> str:
+        """Build one <tr> for the cognitive metrics table with change arrow."""
+        cell = 'style="padding:8px 12px;border-bottom:1px solid #f3f4f6;"'
+
+        baseline_str = f"{baseline:.2f}" if baseline else "–"
+
+        # Change indicator
+        if baseline and baseline > 0:
+            diff = current - baseline
+            if lower_is_better:
+                diff = -diff  # for repetition, going up is bad
+            if diff > 0.03:
+                change_arrow = "↑"
+                change_color = "#22c55e"
+            elif diff < -0.03:
+                change_arrow = "↓"
+                change_color = "#ef4444"
+            else:
+                change_arrow = "→"
+                change_color = "#6b7280"
+        else:
+            change_arrow = "–"
+            change_color = "#6b7280"
+
+        return f"""<tr>
+            <td {cell}>
+                <div>{name}</div>
+                <div style="font-size:11px;color:#9ca3af;">{description}</div>
+            </td>
+            <td {cell}><strong>{current:.2f}</strong></td>
+            <td {cell}>{baseline_str}</td>
+            <td {cell} style="text-align:center;">
+                <span style="font-size:18px;font-weight:700;color:{change_color};">{change_arrow}</span>
+            </td>
+        </tr>"""
 
     # ── scoring helpers (unchanged) ─────────────────────────
 
