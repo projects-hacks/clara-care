@@ -153,6 +153,8 @@ class ReportGenerator:
             "confusion": "Confusion",
             "pain": "Pain Report",
             "social_connection": "Wants Family Contact",
+            "patient_request": "Patient Request",
+            "medication_concern": "Medication Concern",
         }
 
         # Build alerts rows

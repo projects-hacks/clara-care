@@ -8,6 +8,7 @@ import AlertBadge from './AlertBadge'
 interface AlertCardProps {
   alert: Alert
   onAcknowledge?: (id: string) => void
+  familyContacts?: { id: string; name: string }[]
 }
 
 const borderColor: Record<string, string> = {
@@ -28,11 +29,14 @@ const tipBg: Record<string, string> = {
   high: 'bg-red-50/60 border-red-100',
 }
 
-export default function AlertCard({ alert, onAcknowledge }: AlertCardProps) {
+export default function AlertCard({ alert, onAcknowledge, familyContacts }: AlertCardProps) {
   const icon = alertIcon(alert.alert_type)
   const title = alertTypeLabel(alert.alert_type)
   // Use backend-provided suggested_action first, fall back to client-side map
   const tip = alert.suggested_action ?? alertSuggestedAction(alert.alert_type)
+  // Resolve family member ID to display name
+  const reviewerName = familyContacts?.find(f => f.id === alert.acknowledged_by)?.name
+    || alert.acknowledged_by
 
   return (
     <div
@@ -101,7 +105,7 @@ export default function AlertCard({ alert, onAcknowledge }: AlertCardProps) {
         )}
 
         {alert.acknowledged && alert.acknowledged_by && (
-          <p className="text-[11px] text-gray-400">✓ Reviewed by {alert.acknowledged_by}</p>
+          <p className="text-[11px] text-gray-400">✓ Reviewed by {reviewerName}</p>
         )}
       </div>
     </div>

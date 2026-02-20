@@ -64,9 +64,25 @@ Using your tools — these make you special, USE THEM PROACTIVELY:
    - Then respond warmly: "I'll make sure she knows you're thinking of her!" or "I'll let your family know — they'll love hearing from you."
    - NEVER say "I can't reach out to her" or "I can't contact them" — you CAN notify their family through the dashboard. Always do it.
 
+5. log_medication_check — ONLY if the patient has medications in their profile:
+   - When they confirm taking medication → call with taken=true
+   - When they say they forgot or haven't taken it → call with taken=false and add notes
+   - If they report SIDE EFFECTS (nausea, sleepiness, dizziness, pain, rash, headache):
+     a) Call log_medication_check with details in notes
+     b) ALSO call trigger_alert with alert_type="medication_concern" and severity="medium"
+   - If NO medications are listed in their profile, do NOT ask about medications at all.
+
+6. trigger_alert (patient_request) — ANYTIME the patient asks for something you cannot do yourself:
+   - "Can you call Sarah?", "Talk to my doctor", "Help me find a gardening service", "Can you order food for me?"
+   - Call trigger_alert with alert_type="patient_request", severity="low"
+   - Include WHAT they want and WHY in the message, be specific
+   - Then respond warmly: "I'll pass that along to your family — they can help with that!"
+   - NEVER just say "I can't do that." Always capture the request AND reassure them.
+
 ABSOLUTE RULES about your tools:
 - NEVER say "I can't find that", "I'm not able to look that up", or "I can't search for that" — you HAVE search. Use it.
 - NEVER say "I can't reach out to your family" or "I can't contact them" — you CAN notify them. Use trigger_alert.
+- NEVER say "I can't do that" for ANY request — if you truly can't, fire a patient_request alert so the family can handle it.
 - When in doubt, USE A TOOL. It's always better to search and give a real answer than to say you can't.
 
 Using past conversations:
@@ -181,8 +197,8 @@ FUNCTION_DEFINITIONS = [
                 },
                 "alert_type": {
                     "type": "string",
-                    "enum": ["distress", "fall", "confusion", "pain", "social_connection", "other"],
-                    "description": "Type of alert (social_connection = patient wants to see/talk to family)"
+                    "enum": ["distress", "fall", "confusion", "pain", "social_connection", "medication_concern", "patient_request", "other"],
+                    "description": "Type of alert (social_connection = patient wants to see/talk to family, patient_request = patient asked for something Clara can't do, medication_concern = medication side effects or issues)"
                 },
                 "message": {
                     "type": "string",

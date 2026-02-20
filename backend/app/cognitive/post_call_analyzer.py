@@ -63,6 +63,7 @@ CONNECTION_PHRASES = [
 async def analyze_transcript(
     transcript: str,
     medications: list[str] | None = None,
+    patient_context: dict | None = None,
 ) -> dict:
     """
     Analyze a conversation transcript using Deepgram Text Intelligence
@@ -74,11 +75,14 @@ async def analyze_transcript(
                       patient, sourced from their profile in the data store.
                       Defaults to an empty list — no medications will be
                       tracked if the caller does not provide this.
+        patient_context:  Optional dict with patient info for richer analysis:
+                          {name, preferred_name, location, family_names, interests}
     """
     patient_meds = [m.lower() for m in (medications or [])]
+    ctx = patient_context or {}
 
     # 1. Deepgram Text Intelligence (summary, sentiment, topics, intents)
-    dg_analysis = await _deepgram_analyze(transcript)
+    dg_analysis = await _deepgram_analyze(transcript, patient_name=ctx.get("preferred_name", ""))
 
     # 2. Elder-care keyword analysis (safety, meds, loneliness, connection)
     care_analysis = _elder_care_analysis(transcript, patient_meds)
@@ -92,7 +96,7 @@ async def analyze_transcript(
         )
     
     # 4. Merge into unified result
-    result = _merge_analysis(dg_analysis, care_analysis, transcript)
+    result = _merge_analysis(dg_analysis, care_analysis, transcript, patient_context=ctx)
     result["memory_inconsistency"] = memory_flags
     
     logger.info(
@@ -106,7 +110,7 @@ async def analyze_transcript(
     return result
 
 
-async def _deepgram_analyze(transcript: str) -> dict:
+async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
     """Call Deepgram's /v1/read endpoint for text intelligence."""
     api_key = os.getenv("DEEPGRAM_API_KEY")
     if not api_key:
@@ -159,11 +163,17 @@ async def _deepgram_analyze(transcript: str) -> dict:
             summary_info = results.get("summary") or {}
             summary = summary_info.get("text", "")
             
-            for generic, replacement in [
+            # Replace generic Deepgram labels with patient name / pronouns
+            pname = patient_name or "She"
+            replacements = [
+                ("The host and caller", pname),
+                ("The host and the caller", pname),
+                ("the host", "Clara"),
                 ("the customer", "she"),
                 ("the caller", "she"),
                 ("Clara", "the companion"),
-            ]:
+            ]
+            for generic, replacement in replacements:
                 summary = re.sub(
                     re.escape(generic), replacement, summary, flags=re.IGNORECASE
                 )
@@ -277,7 +287,7 @@ def _elder_care_analysis(transcript: str, medications: list[str]) -> dict:
     }
 
 
-def _merge_analysis(dg: dict, care: dict, transcript: str) -> dict:
+def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict | None = None) -> dict:
     """Merge Deepgram intelligence with elder-care analysis into unified result."""
     
     # Summary: prefer Deepgram, fall back to basic extraction

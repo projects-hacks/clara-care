@@ -102,6 +102,9 @@ export function alertTypeLabel(alertType: string): string {
     confusion_detected: 'Signs of Confusion',
     emergency: 'Emergency Alert',
     fall: 'Possible Fall Detected',
+    social_connection: 'Wants to Connect with Family',
+    patient_request: 'Has a Request for You',
+    medication_concern: 'Medication Concern',
   }
   return map[alertType] ?? alertType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -121,6 +124,9 @@ export function alertIcon(alertType: string): string {
     confusion_detected: '❓',
     emergency: '🚨',
     fall: '⚠️',
+    social_connection: '💕',
+    patient_request: '📋',
+    medication_concern: '💊',
   }
   return map[alertType] ?? '🔔'
 }
@@ -155,6 +161,10 @@ export function alertSuggestedAction(alertType: string, fallback?: string): stri
       "Call her immediately to confirm she is safe. If you cannot reach her, contact her caregiver or a neighbour right away.",
     social_connection:
       "She is missing you. Give her a call or plan a visit — even just 10 minutes together means a lot.",
+    patient_request:
+      "She asked Clara for help with something. Check the details and see if you can help.",
+    medication_concern:
+      "She mentioned a medication side effect. Consider calling to check in and mentioning it to her doctor.",
   }
   return map[alertType] ?? fallback ?? "Give her a call to check in, and mention this to her doctor if it keeps happening."
 }

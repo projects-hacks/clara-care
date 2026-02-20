@@ -10,6 +10,7 @@ import CognitiveScoreBadge from '@/components/CognitiveScoreBadge'
 import MoodBadge from '@/components/MoodBadge'
 import ConversationCard from '@/components/ConversationCard'
 import AlertCard from '@/components/AlertCard'
+import PatientRequests from '@/components/PatientRequests'
 import {
   getPatient,
   getConversations,
@@ -194,8 +195,8 @@ export default function HomePage() {
                       <li
                         key={i}
                         className={`flex items-start gap-2 rounded-lg p-2 text-xs ${isWarning
-                            ? 'bg-amber-50 text-amber-900'
-                            : 'text-gray-600'
+                          ? 'bg-amber-50 text-amber-900'
+                          : 'text-gray-600'
                           }`}
                       >
                         {isWarning ? (
@@ -229,20 +230,20 @@ export default function HomePage() {
         <section className="rounded-2xl bg-white p-3 shadow-sm" aria-label="Quick Stats">
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-gray-50 p-3 text-center">
-            <MessageSquare className="mx-auto mb-1 h-5 w-5 text-clara-500" />
-            <p className="text-lg font-bold text-gray-900">{conversations.length}</p>
-            <p className="text-[10px] text-gray-400">Conversations</p>
-          </div>
+              <MessageSquare className="mx-auto mb-1 h-5 w-5 text-clara-500" />
+              <p className="text-lg font-bold text-gray-900">{conversations.length}</p>
+              <p className="text-[10px] text-gray-400">Conversations</p>
+            </div>
             <div className="rounded-xl bg-gray-50 p-3 text-center">
-            <Bell className="mx-auto mb-1 h-5 w-5 text-red-400" />
-            <p className="text-lg font-bold text-gray-900">{unacknowledgedAlerts.length}</p>
-            <p className="text-[10px] text-gray-400">Active Alerts</p>
-          </div>
+              <Bell className="mx-auto mb-1 h-5 w-5 text-red-400" />
+              <p className="text-lg font-bold text-gray-900">{unacknowledgedAlerts.length}</p>
+              <p className="text-[10px] text-gray-400">Active Alerts</p>
+            </div>
             <div className="rounded-xl bg-gray-50 p-3 text-center">
-            <Calendar className="mx-auto mb-1 h-5 w-5 text-green-500" />
-            <p className="text-lg font-bold text-gray-900">{daysTracked}</p>
-            <p className="text-[10px] text-gray-400">Days Tracked</p>
-          </div>
+              <Calendar className="mx-auto mb-1 h-5 w-5 text-green-500" />
+              <p className="text-lg font-bold text-gray-900">{daysTracked}</p>
+              <p className="text-[10px] text-gray-400">Days Tracked</p>
+            </div>
           </div>
         </section>
 
@@ -268,6 +269,13 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* Patient Requests — actionable items separate from cognitive alerts */}
+        <PatientRequests
+          alerts={alerts}
+          patientName={patient?.name || ''}
+          onAcknowledge={handleAcknowledge}
+        />
+
         {displayAlerts.length > 0 && (
           <section aria-label="Active Alerts" className="rounded-2xl bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
@@ -282,7 +290,12 @@ export default function HomePage() {
             </div>
             <div className="space-y-2">
               {displayAlerts.map((a) => (
-                <AlertCard key={a.id} alert={a} onAcknowledge={handleAcknowledge} />
+                <AlertCard
+                  key={a.id}
+                  alert={a}
+                  onAcknowledge={handleAcknowledge}
+                  familyContacts={patient?.family_contacts}
+                />
               ))}
             </div>
           </section>

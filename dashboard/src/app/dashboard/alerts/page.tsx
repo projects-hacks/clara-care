@@ -81,21 +81,21 @@ export default function AlertsPage() {
             <span>Unacknowledged: {unacknowledgedCount}</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
-          {SEVERITY_FILTERS.map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              className={cn(
-                'shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-colors',
-                activeFilter === filter
-                  ? 'bg-clara-600 text-white'
-                  : 'bg-white text-gray-600 shadow-sm active:bg-gray-50'
-              )}
-              type="button"
-            >
-              {filter}
-            </button>
-          ))}
+            {SEVERITY_FILTERS.map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                className={cn(
+                  'shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-colors',
+                  activeFilter === filter
+                    ? 'bg-clara-600 text-white'
+                    : 'bg-white text-gray-600 shadow-sm active:bg-gray-50'
+                )}
+                type="button"
+              >
+                {filter}
+              </button>
+            ))}
           </div>
 
           <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2">
@@ -143,6 +143,7 @@ export default function AlertsPage() {
                 key={a.id}
                 alert={a}
                 onAcknowledge={handleAcknowledge}
+                familyContacts={patient?.family_contacts}
               />
             ))}
           </div>

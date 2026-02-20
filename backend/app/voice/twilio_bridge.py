@@ -293,7 +293,25 @@ class TwilioCallSession:
                         f"— medication tracking will be skipped this call."
                     )
 
-                analysis = await analyze_transcript(transcript_text, medications=patient_meds)
+                # Build patient context for richer analysis
+                patient_context = None
+                if patient:
+                    prefs = patient.get("preferences", {})
+                    patient_context = {
+                        "name": patient.get("name", ""),
+                        "preferred_name": patient.get("preferred_name", ""),
+                        "location": patient.get("location", ""),
+                        "family_names": [
+                            fc.get("name", "") for fc in patient.get("family_contacts", [])
+                        ],
+                        "interests": prefs.get("interests", []) + prefs.get("favorite_topics", []),
+                    }
+
+                analysis = await analyze_transcript(
+                    transcript_text,
+                    medications=patient_meds,
+                    patient_context=patient_context,
+                )
                 summary = analysis.get("summary", "Check-in call.")
                 detected_mood = analysis.get("mood", "neutral")
                 
