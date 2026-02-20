@@ -136,11 +136,16 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
         return {}
     
     # Context prefix so Deepgram understands the conversation structure
-    # (not included in summary output — it's just for parsing guidance)
+    # IMPORTANT: Be extremely restrictive to prevent hallucinated summaries.
+    # Deepgram sometimes generates content about topics never discussed
+    # (e.g. gardening, comedy movies) when the prompt is too loose.
     context_prefix = (
-        "The following is a transcript of a wellness phone call with an elderly adult. "
-        "Summarize only what the PATIENT said: their mood, what they talked about, "
-        "and anything noteworthy. Write in third person, concisely, as if briefing a family member.\n\n"
+        "Below is a verbatim phone call transcript between a companion named Clara "
+        "and an elderly patient. Summarize ONLY what the PATIENT actually said — "
+        "their mood, topics THEY brought up, and anything noteworthy THEY mentioned. "
+        "Do NOT add, infer, or fabricate any details not explicitly present in the transcript. "
+        "Do NOT mention topics that were not discussed. Write 2-3 concise sentences "
+        "in third person, as if briefing a family member.\n\n"
     )
     transcript_for_analysis = context_prefix + transcript
     

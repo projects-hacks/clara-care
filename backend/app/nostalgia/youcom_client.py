@@ -42,13 +42,16 @@ class YouComClient:
                     Sign up at https://you.com/platform for $100 free credits
         """
         self.api_key = api_key or os.getenv("YOUCOM_API_KEY")
+        # You.com Search API — official base URL per docs: https://ydc-index.io
+        # If 403, likely expired API key or exhausted credits.
         self.base_url = "https://ydc-index.io"
         
         if self.api_key:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 headers={"X-API-Key": self.api_key},
-                timeout=15.0
+                timeout=15.0,
+                follow_redirects=False,  # Prevent redirect stripping auth headers
             )
             logger.info("✓ YouComClient initialized with API key")
         else:
@@ -186,6 +189,14 @@ class YouComClient:
                 "/v1/search",
                 params={"query": query}
             )
+            
+            if response.status_code == 403:
+                logger.error(
+                    "You.com API returned 403 Forbidden — API key may be expired "
+                    "or credits exhausted. Check https://you.com/platform"
+                )
+                return self._fallback_realtime(query)
+            
             response.raise_for_status()
             data = response.json()
 
