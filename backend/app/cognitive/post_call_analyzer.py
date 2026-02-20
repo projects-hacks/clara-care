@@ -215,7 +215,9 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
                 # Specific compound labels first (longest match first)
                 (r"(?:the )?host and (?:the )?caller", f"Clara and {pname}"),
                 (r"(?:the )?caller and (?:the )?host", f"Clara and {pname}"),
+                (r"(?:the )?companion and (?:the )?caller", f"Clara and {pname}"),
                 (r"the elderly (?:adult|patient|woman|man)", pname),
+                (r"(?:the |an? )?(?:AI )?companion", "Clara"),
                 (r"the host", "Clara"),
                 (r"the customer", pname),
                 (r"the caller", pname),
@@ -592,9 +594,8 @@ def _extract_patient_text(transcript: str) -> str:
 def _detect_memory_inconsistency(transcript: str) -> list[str]:
     """
     Detect memory inconsistency patterns within patient turns.
-    Catches YES -> UNSURE -> NO contradictions within a sliding window of turns.
-    
-    Example: "Yes I took it" -> "I think so" -> "Can't remember"
+    Catches YES -> UNSURE -> NO contradictions within a sliding window of turns,
+    but only for substantial contradictions (not conversational fillers like 'No. I'm doing good').
     """
     lines = transcript.split("\n")
     patient_turns = []
@@ -605,25 +606,28 @@ def _detect_memory_inconsistency(transcript: str) -> list[str]:
         speaker = line.split(":", 1)[0].strip().lower()
         if speaker in ("patient", "emily", "dorothy"):
             text = line.split(":", 1)[1].strip().lower() if ":" in line else ""
-            patient_turns.append(text)
+            # Only include turns with enough substance (>3 words) to avoid fillers
+            if len(text.split()) > 3:
+                patient_turns.append(text)
     
-    if len(patient_turns) < 2:
+    if len(patient_turns) < 3:
         return []
     
     flags = []
-    affirmative = {"yes", "yeah", "yep", "sure", "of course", "i did", "i took"}
-    uncertain = {"i think so", "maybe", "probably", "not sure", "i guess"}
-    negative = {"no", "can't remember", "i don't know", "i forgot", "didn't", "haven't"}
+    # Require longer, more specific phrases to reduce false positives
+    affirmative = {"yes i did", "yes i took", "i did take", "of course i did", "i remember"}
+    uncertain = {"i think so", "maybe i did", "probably", "not sure if", "i guess so", "i can't recall"}
+    negative = {"can't remember", "i don't know", "i forgot", "didn't take", "haven't done", "i don't remember"}
     
-    # Sliding window of 3-4 turns
+    # Sliding window of 3-4 turns — must have same topic context
     window_size = 4
-    for i in range(len(patient_turns) - 1):
+    for i in range(len(patient_turns) - 2):
         window = patient_turns[i:i + window_size]
         
         has_affirm = any(any(a in turn for a in affirmative) for turn in window[:2])
         has_contradict = any(
             any(n in turn for n in negative) or any(u in turn for u in uncertain)
-            for turn in window[1:]
+            for turn in window[2:]
         )
         
         if has_affirm and has_contradict:
