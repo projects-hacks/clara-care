@@ -113,12 +113,13 @@ class FoxitPDFServicesClient:
     async def _create_pdf(self, document_id: str) -> Optional[str]:
         """Kick off HTML→PDF conversion, return taskId."""
         resp = await self._client.post(
-            "/pdf-services/api/pdf/create",
+            "/pdf-services/api/documents/create/pdf-from-html",
             json={"documentId": document_id},
             headers={"Content-Type": "application/json"},
         )
         if resp.status_code == 200:
-            task_id = resp.json().get("taskId")
+            data = resp.json()
+            task_id = data.get("taskId")
             logger.info(f"  ✓ Create-PDF → taskId={task_id}")
             return task_id
         logger.error(f"  Create-PDF failed ({resp.status_code}): {resp.text[:300]}")

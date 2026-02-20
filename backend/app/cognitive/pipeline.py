@@ -105,7 +105,12 @@ class CognitivePipeline:
             "summary": summary,
             "detected_mood": detected_mood,
             "transcript": transcript,
-            "cognitive_metrics": metrics
+            "cognitive_metrics": metrics,
+            "medication_status": (analysis or {}).get("medication_status", {
+                "discussed": False,
+                "medications_mentioned": [],
+                "notes": ""
+            })
         }
         
         await self.data_store.save_conversation(conversation)

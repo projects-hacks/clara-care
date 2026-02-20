@@ -65,6 +65,11 @@ export interface Conversation {
     content_used: string
     engagement_score: number
   } | null
+  medication_status?: {
+    discussed: boolean
+    medications_mentioned: { name: string; taken?: boolean }[]
+    notes: string
+  } | null
 }
 
 export interface Alert {

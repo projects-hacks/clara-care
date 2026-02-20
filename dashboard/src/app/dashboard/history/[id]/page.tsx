@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Clock, Sparkles, Star, MessageCircle, Brain, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { Clock, Sparkles, Star, MessageCircle, Brain, AlertTriangle, TrendingUp, TrendingDown, Minus, Pill } from 'lucide-react'
 import TopBar from '@/components/TopBar'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import MoodBadge from '@/components/MoodBadge'
@@ -187,6 +187,7 @@ export default function ConversationDetailPage() {
 
   const nostalgia = conversation.nostalgia_engagement
   const moodCtx = getMoodContext(conversation.detected_mood)
+  const medStatus = conversation.medication_status
 
   // Aggregate health signal — count bad/warn metrics
   const badCount = metricEntries.filter(({ key, value }) => getMetricStatus(key, value) === 'bad').length
@@ -291,6 +292,43 @@ export default function ConversationDetailPage() {
                 )
               })}
             </div>
+          </section>
+        )}
+
+        {/* ── Medication check ── */}
+        {medStatus && (
+          <section className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <Pill className="h-4 w-4 text-blue-500" />
+              <h2 className="text-sm font-semibold text-gray-900">Medication check</h2>
+            </div>
+            {medStatus.discussed ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5">
+                  <span className="text-base">✅</span>
+                  <p className="text-xs font-medium text-emerald-700">Clara asked about medications during this call.</p>
+                </div>
+                {medStatus.medications_mentioned && medStatus.medications_mentioned.length > 0 && (
+                  <div className="space-y-1 pl-1">
+                    {medStatus.medications_mentioned.map((med, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
+                        <span>{med.taken === true ? '✅' : med.taken === false ? '❌' : '➖'}</span>
+                        <span className="font-medium">{med.name}</span>
+                        <span className="text-gray-400">{med.taken === true ? 'Confirmed taken' : med.taken === false ? 'Not taken' : 'Mentioned'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {medStatus.notes && (
+                  <p className="text-[11px] text-gray-500 pl-1 mt-1">{medStatus.notes}</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5">
+                <span className="text-base">⚠️</span>
+                <p className="text-xs font-medium text-amber-700">Medications weren&apos;t discussed in this call.</p>
+              </div>
+            )}
           </section>
         )}
 

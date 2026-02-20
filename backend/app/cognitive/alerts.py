@@ -33,15 +33,9 @@ class AlertEngine:
         deviations: list[dict]
     ) -> list[dict]:
         """
-        Check deviations and generate alerts if thresholds are met
-        
-        Args:
-            patient_id: Patient identifier
-            metrics: Current CognitiveMetrics dict
-            deviations: List of BaselineDeviation dicts from baseline tracker
-            
-        Returns:
-            List of Alert dicts that were created
+        Check deviations and generate alerts if thresholds are met.
+        De-duplicates: skips if an unacknowledged alert already exists
+        for the same alert_type. Upgrades severity if new is worse.
         """
         if not deviations:
             return []
@@ -53,11 +47,42 @@ class AlertEngine:
             self.default_consecutive_trigger
         )
         
+        # Fetch existing unacknowledged alerts for dedup
+        existing_alerts = await self.data_store.get_alerts(patient_id, limit=50)
+        active_by_type = {}
+        for a in existing_alerts:
+            if not a.get("acknowledged"):
+                active_by_type[a.get("alert_type")] = a
+        
+        # Map metric names → alert types
+        alert_type_map = {
+            "vocabulary_diversity": "vocabulary_shrinkage",
+            "topic_coherence": "coherence_drop",
+            "repetition_rate": "repetition_increase",
+            "word_finding_pauses": "word_finding_difficulty",
+            "response_latency": "response_delay"
+        }
+        
         alerts_created = []
         
         for deviation in deviations:
             # Only alert if consecutive count meets threshold
             if deviation["consecutive_count"] >= consecutive_trigger:
+                a_type = alert_type_map.get(deviation["metric_name"], "cognitive_decline")
+                
+                # Dedup: skip if active alert already exists for this type
+                if a_type in active_by_type:
+                    existing = active_by_type[a_type]
+                    if self._severity_rank(deviation["severity"]) > self._severity_rank(existing.get("severity", "low")):
+                        # Upgrade severity on existing alert
+                        await self.data_store.update_alert(existing["id"], {
+                            "severity": deviation["severity"]
+                        })
+                        logger.info(f"Upgraded alert {existing['id']} to {deviation['severity']}")
+                    else:
+                        logger.info(f"Skipping duplicate alert for {a_type} (active alert exists)")
+                    continue
+                
                 alert = await self._create_alert_from_deviation(
                     patient_id,
                     deviation,
@@ -70,6 +95,11 @@ class AlertEngine:
             await self._dispatch_notifications(patient_id, alerts_created)
         
         return alerts_created
+    
+    @staticmethod
+    def _severity_rank(severity: str) -> int:
+        """Rank severity for comparison: higher = worse."""
+        return {"low": 1, "medium": 2, "high": 3}.get(severity, 0)
     
     async def _create_alert_from_deviation(
         self,
@@ -311,24 +341,32 @@ class AlertEngine:
     
     async def acknowledge_alert(self, alert_id: str, acknowledged_by: str) -> bool:
         """
-        Mark an alert as acknowledged
-        
-        Args:
-            alert_id: Alert identifier
-            acknowledged_by: ID of person acknowledging (family member ID)
-            
-        Returns:
-            True if successful
+        Mark an alert as acknowledged.
+        Resolves family member ID to their display name before storing.
         """
+        # Resolve family member name from patient's contacts
+        display_name = acknowledged_by
+        try:
+            # Get the alert first to find the patient
+            all_alerts = await self.data_store.get_alerts("", limit=100)
+            alert_record = next((a for a in all_alerts if a.get("id") == alert_id), None)
+            if alert_record:
+                patient = await self.data_store.get_patient(alert_record.get("patient_id", ""))
+                if patient:
+                    for contact in patient.get("family_contacts", []):
+                        if contact.get("id") == acknowledged_by:
+                            display_name = contact.get("name", acknowledged_by)
+                            break
+        except Exception as e:
+            logger.debug(f"Could not resolve family name for {acknowledged_by}: {e}")
+        
         updates = {
             "acknowledged": True,
-            "acknowledged_at": datetime.now(UTC).isoformat(),
-            "acknowledged_by": acknowledged_by
+            "acknowledged_by": display_name,
+            "acknowledged_at": datetime.now(UTC).isoformat()
         }
         
         success = await self.data_store.update_alert(alert_id, updates)
-        
         if success:
-            logger.info(f"Alert {alert_id} acknowledged by {acknowledged_by}")
-        
+            logger.info(f"Alert {alert_id} acknowledged by {display_name}")
         return success
