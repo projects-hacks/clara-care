@@ -44,15 +44,33 @@ LONELINESS_KEYWORDS = [
 ]
 
 # ─── Desire to connect (wants to see/talk to family) ───────────────────────────
+# IMPORTANT: All patterns with wildcards use [^.!?,]{0,35} instead of .*
+# This caps the match to within a single clause and prevents cross-sentence
+# false positives (e.g. "miss those days... the whole family was together"
+# being misread as a request to see family).
 CONNECTION_PHRASES = [
-    "wish.*could come", "wish.*would visit", "want.*to meet",
-    "want.*to see", "want.*to visit", "come and meet",
-    "come and see", "hope.*calls", "hope.*visits",
-    "want.*to talk to", "miss.*son", "miss.*daughter",
-    "miss.*family", "want.*come over", "like.*to visit",
-    "wondering if.*could come", "want him to come",
-    "want her to come", "family get together",
-    "spend.*time with me",
+    # Explicit wish/want to have someone visit or meet
+    r"wish[^.!?,]{0,35}could come",
+    r"wish[^.!?,]{0,35}would visit",
+    r"want[^.!?,]{0,35}to (?:come|visit|meet|see) (?:me|us|over)",
+    r"come and (?:meet|see) me",
+    r"hope[^.!?,]{0,35}(?:calls?|visits?|comes?)",
+
+    # Explicitly missing a specific person (not a vague nostalgic "miss")
+    # Must be followed immediately by the relation word within ~4 words
+    r"miss(?:ing)?\s+(?:my\s+)?(?:son|daughter|child(?:ren)?|grandchild(?:ren)?|family|kids?)",
+    r"miss(?:ing)?\s+(?:you|him|her|them)\b",
+
+    # Wanting to talk to someone
+    r"want[^.!?,]{0,35}to talk to[^.!?,]{0,25}(?:you|him|her|them|family|son|daughter)",
+
+    # Direct requests for a visit
+    r"want[^.!?,]{0,25}(?:come|visit)[^.!?,]{0,25}over",
+    r"wondering if[^.!?,]{0,35}could come",
+    r"want (?:him|her|them|you) to come",
+    r"family get.?together",
+    r"spend[^.!?,]{0,25}time with me",
+    r"(?:like|love)[^.!?,]{0,25}to (?:see|visit|meet) (?:you|them|family|everyone)",
 ]
 
 # NOTE: medication list is no longer hardcoded here.

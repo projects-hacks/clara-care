@@ -327,7 +327,8 @@ class FunctionHandler:
         patient_id = params.get("patient_id", self.patient_id)
         severity = params.get("severity", "medium")
         alert_type = params.get("alert_type", "other")
-        message = params.get("message", "")
+        # Accept either "message" or "description" so callers are consistent
+        message = params.get("message") or params.get("description", "")
         
         try:
             # Use AlertEngine directly (handles save + email dispatch)

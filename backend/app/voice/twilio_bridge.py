@@ -457,10 +457,11 @@ class TwilioCallSession:
                         "severity": "medium",
                         "alert_type": "social_connection",
                         "related_metrics": ["loneliness_indicators"],
-                        "description": message
+                        "message": message,   # must be "message" — trigger_alert reads params.get("message")
                     }
                 )
                 logger.info(f"[CONNECTION_ALERT_CREATED] CallSid={self.call_sid}")
+
             
         except Exception as e:
             logger.error(f"[ALERT_CREATION_FAILED] CallSid={self.call_sid} error={e}")
