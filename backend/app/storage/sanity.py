@@ -459,7 +459,7 @@ class SanityDataStore:
         end = offset + limit
         try:
             result = await self._query_groq(
-                f'*[_type == "wellnessDigest" && patient._ref == $pid] | order(generatedAt desc) [{offset}...{end}]',
+                f'*[_type == "wellnessDigest" && patient._ref == $pid] | order(_updatedAt desc) [{offset}...{end}]',
                 {"pid": patient_id},
             )
             return [self._map_digest(d) for d in (result.get("result") or []) if d]
@@ -470,7 +470,7 @@ class SanityDataStore:
     async def get_latest_wellness_digest(self, patient_id: str) -> Optional[dict]:
         try:
             result = await self._query_groq(
-                '*[_type == "wellnessDigest" && patient._ref == $pid] | order(generatedAt desc)[0]',
+                '*[_type == "wellnessDigest" && patient._ref == $pid] | order(_updatedAt desc)[0]',
                 {"pid": patient_id},
             )
             return self._map_digest(result.get("result"))
