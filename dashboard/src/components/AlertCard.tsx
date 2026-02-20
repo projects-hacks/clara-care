@@ -41,11 +41,11 @@ export default function AlertCard({ alert, onAcknowledge, familyContacts }: Aler
   return (
     <div
       className={cn(
-        'rounded-2xl border border-gray-100 bg-white shadow-sm transition-all',
-        !alert.acknowledged && 'border-l-4 shadow-sm',
-        !alert.acknowledged && borderColor[alert.severity],
-        alert.acknowledged && 'opacity-60',
-        !alert.acknowledged && 'active:bg-gray-50'
+        'group relative overflow-hidden rounded-2xl border bg-white transition-all duration-300 ease-out',
+        !alert.acknowledged
+          ? ['border-transparent shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] ring-1 ring-inset', borderColor[alert.severity]]
+          : 'border-gray-100/50 opacity-60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]',
+        !alert.acknowledged && 'hover:-translate-y-0.5 hover:shadow-[0_8px_25px_-6px_rgba(0,0,0,0.12)] active:scale-[0.98]'
       )}
     >
       {/* Header */}
@@ -96,7 +96,7 @@ export default function AlertCard({ alert, onAcknowledge, familyContacts }: Aler
         {!alert.acknowledged && onAcknowledge && (
           <button
             onClick={() => onAcknowledge(alert.id)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-clara-100 bg-clara-50 px-3 py-1.5 text-xs font-medium text-clara-700 transition-colors active:bg-clara-100"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-clara-200/50 bg-gradient-to-b from-clara-50/50 to-clara-100/30 px-3 py-1.5 text-xs font-medium text-clara-700 shadow-sm transition-all hover:border-clara-300 hover:from-clara-50 hover:to-clara-100 active:scale-95"
             type="button"
           >
             <Check className="h-3.5 w-3.5" />

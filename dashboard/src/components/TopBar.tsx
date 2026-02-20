@@ -15,13 +15,13 @@ export default function TopBar({ title, subtitle, showBack, rightAction }: TopBa
   const router = useRouter()
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/85 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/75">
+    <header className="sticky top-0 z-40 border-b border-white/20 bg-white/70 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md supports-[backdrop-filter]:bg-white/60">
       <div className="flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
           {showBack && (
             <button
               onClick={() => router.back()}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-100 bg-white shadow-sm transition-colors active:bg-gray-50"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-100 bg-white shadow-sm transition-all hover:bg-gray-50 hover:shadow-md active:scale-95 active:bg-gray-100"
               aria-label="Go back"
             >
               <ArrowLeft className="h-5 w-5 text-gray-700" />

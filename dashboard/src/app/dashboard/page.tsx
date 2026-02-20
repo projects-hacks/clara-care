@@ -131,8 +131,9 @@ export default function HomePage() {
       />
 
       <main className="space-y-4 px-4 py-4">
-        <section className="rounded-2xl bg-gradient-to-br from-clara-50 to-white p-4 shadow-sm" aria-label="Overview">
-          <div className="flex items-start justify-between gap-3">
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-clara-500/10 via-clara-50 to-white p-5 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] ring-1 ring-clara-200/50" aria-label="Overview">
+          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-clara-400/10 blur-2xl"></div>
+          <div className="flex items-start justify-between gap-3 relative z-10">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium uppercase tracking-wide text-clara-700/70">
                 Today’s snapshot
@@ -147,7 +148,7 @@ export default function HomePage() {
             <button
               onClick={handleDownloadReport}
               disabled={downloading || !patient}
-              className="flex shrink-0 flex-col items-center gap-1 rounded-xl bg-white px-3 py-2 text-[10px] font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-60"
+              className="flex shrink-0 flex-col items-center gap-1 rounded-xl bg-white/80 px-3 py-2 text-[10px] font-medium text-gray-700 shadow-sm ring-1 ring-gray-200/50 backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:scale-95 disabled:opacity-60"
               aria-label="Download cognitive report PDF"
             >
               <Download className={`h-4 w-4 ${downloading ? 'animate-bounce' : ''}`} />
@@ -227,22 +228,22 @@ export default function HomePage() {
           </section>
         )}
 
-        <section className="rounded-2xl bg-white p-3 shadow-sm" aria-label="Quick Stats">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl bg-gray-50 p-3 text-center">
-              <MessageSquare className="mx-auto mb-1 h-5 w-5 text-clara-500" />
-              <p className="text-lg font-bold text-gray-900">{conversations.length}</p>
-              <p className="text-[10px] text-gray-400">Conversations</p>
+        <section className="rounded-2xl bg-white/50 p-2" aria-label="Quick Stats">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-gray-100/50 bg-white p-4 text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] transition-all hover:shadow-md">
+              <MessageSquare className="mx-auto mb-1.5 h-6 w-6 text-clara-500" />
+              <p className="text-xl font-bold text-gray-900">{conversations.length}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-gray-400 uppercase tracking-wider">Calls</p>
             </div>
-            <div className="rounded-xl bg-gray-50 p-3 text-center">
-              <Bell className="mx-auto mb-1 h-5 w-5 text-red-400" />
-              <p className="text-lg font-bold text-gray-900">{unacknowledgedAlerts.length}</p>
-              <p className="text-[10px] text-gray-400">Active Alerts</p>
+            <div className="rounded-xl border border-gray-100/50 bg-white p-4 text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] transition-all hover:shadow-md">
+              <Bell className="mx-auto mb-1.5 h-6 w-6 text-red-400" />
+              <p className="text-xl font-bold text-gray-900">{unacknowledgedAlerts.length}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-gray-400 uppercase tracking-wider">Alerts</p>
             </div>
-            <div className="rounded-xl bg-gray-50 p-3 text-center">
-              <Calendar className="mx-auto mb-1 h-5 w-5 text-green-500" />
-              <p className="text-lg font-bold text-gray-900">{daysTracked}</p>
-              <p className="text-[10px] text-gray-400">Days Tracked</p>
+            <div className="rounded-xl border border-gray-100/50 bg-white p-4 text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] transition-all hover:shadow-md">
+              <Calendar className="mx-auto mb-1.5 h-6 w-6 text-green-500" />
+              <p className="text-xl font-bold text-gray-900">{daysTracked}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-gray-400 uppercase tracking-wider">Days</p>
             </div>
           </div>
         </section>
