@@ -27,20 +27,22 @@ def calculate_cognitive_score(metrics: dict) -> int:
     ttr_score = max(0, min(25, ((ttr - 0.3) / 0.5) * 25))
     
     # Coherence score (higher is better) - use default 0.7 if None
+    # Range widened to 0.15-0.85: phone conversations with short
+    # responses ("Yeah", "Okay") naturally score low on embeddings
     coherence = metrics.get("topic_coherence")
     coherence = coherence if coherence is not None else 0.7
-    coh_score = max(0, min(25, ((coherence - 0.4) / 0.6) * 25))
+    coh_score = max(0, min(25, ((coherence - 0.15) / 0.70) * 25))
     
     # Repetition score (lower rate is better)
-    # Formula: (1 - rate - 0.7) normalizes 0.0-0.3 range to 0.3-0.0
-    # The 0.7 constant is complement of max expected rate (1 - 0.3 = 0.7)
-    # This maps: 0% repetition → 25 pts, 30% repetition → 0 pts
+    # Range widened to 0.0-0.4: cross-conversation trigrams and
+    # common phrases ("yeah yeah") inflate the rate for elderly speakers
     rep_rate = metrics.get("repetition_rate", 0.1)
-    rep_score = max(0, min(25, ((1 - rep_rate - 0.7) / 0.3) * 25))
+    rep_score = max(0, min(25, ((1 - rep_rate - 0.6) / 0.4) * 25))
     
     # Word-finding score (fewer pauses is better)
+    # Threshold raised to 15: elderly speakers use more fillers naturally
     pauses = metrics.get("word_finding_pauses", 0)
-    wf_score = max(0, min(25, (1 - min(pauses / 10, 1.0)) * 25))
+    wf_score = max(0, min(25, (1 - min(pauses / 15, 1.0)) * 25))
     
     total = int(ttr_score + coh_score + rep_score + wf_score)
     return max(0, min(100, total))

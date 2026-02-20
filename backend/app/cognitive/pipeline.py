@@ -476,21 +476,21 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
         repetition = metrics.get("repetition_rate", 0)
 
         # Low coherence — family should reach out personally
-        if coherence is not None and coherence < 0.40:
+        if coherence is not None and coherence < 0.25:
             recommendations.append(
                 "Consider giving her a call yourself today — a familiar voice can help when "
                 "she's having a harder time expressing herself."
             )
 
         # Word-finding difficulty — worth flagging to doctor if persistent
-        if word_pauses > 3:
+        if word_pauses > 5:
             recommendations.append(
                 "If you notice this pattern continuing over the next few days, "
                 "mention it at her next doctor's appointment."
             )
 
         # High repetition — redirect with engagement
-        if repetition > 0.1:
+        if repetition > 0.15:
             recommendations.append(
                 "Try calling her and asking about a specific memory or activity she enjoys — "
                 "fresh topics can help break repetitive patterns."
