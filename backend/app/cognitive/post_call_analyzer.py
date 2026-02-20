@@ -493,43 +493,95 @@ def _extract_medication_status(transcript: str, medications: list[str]) -> dict:
     """
     Extract medication mentions and whether they were taken.
 
+    Strategy: scan EVERY mention of each medication in the transcript, track
+    the signals found (positive / negative / indirect), and resolve using the
+    LAST clear signal.  This handles the common "No… actually my pill box is
+    empty" correction pattern without misclassifying it as 'not taken'.
+
     Args:
         medications: Lowercase medication names from the patient's profile.
-                     An empty list means no medications are tracked for this patient.
+                     An empty list means no medications are tracked.
     """
     text_lower = transcript.lower()
     meds_mentioned = []
     discussed = False
-    
+
+    # Positive signals — direct confirmation or indirect evidence
+    _TAKEN_WORDS = [
+        "took", "taken", "had my", "just took", "already took",
+        "yes", "yeah", "yep", "i did", "i have",
+    ]
+    # Indirect / inferred confirmation (e.g. empty pill box means it was taken)
+    _INDIRECT_TAKEN = [
+        "pill box is empty", "pillbox is empty", "pill box empty",
+        "pillbox empty", "it's empty", "its empty",
+        "i must have taken", "must have taken", "already done",
+    ]
+    # Negative signals
+    _MISSED_WORDS = [
+        "missed", "forgot", "didn't take", "haven't taken",
+        "not yet", "not taken", "no,", "no i", "no,\n",
+    ]
+
+    CONTEXT_WINDOW = 100  # chars on each side of a mention to check
+
     for med in medications:
-        if med in text_lower:
-            discussed = True
-            taken = None
-            # Search in context around the medication mention
-            idx = text_lower.index(med)
-            context_start = max(0, idx - 80)
-            context_end = min(len(text_lower), idx + len(med) + 80)
-            context = text_lower[context_start:context_end]
-            
-            if any(w in context for w in ["took", "taken", "had", "yes", "yeah"]):
-                taken = True
-            if any(w in context for w in ["missed", "forgot", "didn't", "haven't", "not yet"]):
-                taken = False
-            
-            med_name = med.title()
-            meds_mentioned.append({"name": med_name, "taken": taken})
-    
-    notes = ""
-    if meds_mentioned:
-        taken_list = [m["name"] for m in meds_mentioned if m.get("taken") is True]
-        missed_list = [m["name"] for m in meds_mentioned if m.get("taken") is False]
-        if taken_list:
-            notes += f"Took: {', '.join(taken_list)}. "
-        if missed_list:
-            notes += f"Missed: {', '.join(missed_list)}. "
-    
+        if med not in text_lower:
+            continue
+
+        discussed = True
+        # Collect every start position where this medication appears
+        positions = []
+        start = 0
+        while True:
+            idx = text_lower.find(med, start)
+            if idx == -1:
+                break
+            positions.append(idx)
+            start = idx + 1
+
+        # Evaluate signal at each position; keep a running 'last_signal'
+        last_signal: bool | None = None
+        was_corrected = False
+
+        for idx in positions:
+            ctx_start = max(0, idx - CONTEXT_WINDOW)
+            ctx_end = min(len(text_lower), idx + len(med) + CONTEXT_WINDOW)
+            ctx = text_lower[ctx_start:ctx_end]
+
+            is_positive  = any(w in ctx for w in _TAKEN_WORDS)
+            is_indirect  = any(w in text_lower for w in _INDIRECT_TAKEN)  # whole transcript
+            is_negative  = any(w in ctx for w in _MISSED_WORDS)
+
+            if is_indirect or is_positive:
+                if last_signal is False:
+                    was_corrected = True   # denial was reversed
+                last_signal = True
+            elif is_negative:
+                last_signal = False
+            # If neither, leave last_signal unchanged (ambiguous mention)
+
+        taken = last_signal  # None if no clear signal at all
+
+        # Build a human-readable note for this medication
+        med_name = med.title()
+        if taken is True and was_corrected:
+            note = f"She initially said no to {med_name} but later confirmed she took it (pill box was empty)."
+        elif taken is True:
+            note = f"She confirmed she took her {med_name}."
+        elif taken is False:
+            note = f"She said she did not take her {med_name}."
+        else:
+            note = f"She mentioned {med_name} but didn't clearly confirm whether she took it."
+
+        meds_mentioned.append({"name": med_name, "taken": taken, "note": note})
+
+    # Aggregate notes
+    notes = " ".join(m["note"] for m in meds_mentioned) if meds_mentioned else ""
+
     return {
         "discussed": discussed,
         "medications_mentioned": meds_mentioned,
         "notes": notes.strip(),
     }
+
