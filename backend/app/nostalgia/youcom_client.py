@@ -42,7 +42,7 @@ class YouComClient:
                     Sign up at https://you.com/platform for $100 free credits
         """
         self.api_key = api_key or os.getenv("YOUCOM_API_KEY")
-        self.base_url = "https://api.ydc-index.io"
+        self.base_url = "https://ydc-index.io"
         
         if self.api_key:
             self._client = httpx.AsyncClient(
@@ -133,17 +133,22 @@ class YouComClient:
             )
             response.raise_for_status()
             data = response.json()
-            
-            # Parse You.com response format
+
+            # /v1/search returns {results: {web: [{url, title, description, snippets}]}}
+            # Handle both the nested dict shape and any legacy flat-list shape.
+            raw = data.get("results", {})
+            web_list = raw.get("web", []) if isinstance(raw, dict) else raw
+
             results = []
-            if "results" in data:
-                for result in data["results"][:count]:
-                    results.append({
-                        "title": result.get("title", ""),
-                        "snippet": result.get("description", ""),
-                        "url": result.get("url", "")
-                    })
-            
+            for result in web_list[:count]:
+                results.append({
+                    "title": result.get("title", ""),
+                    "snippet": result.get("description", "") or (
+                        result.get("snippets", [""])[0] if result.get("snippets") else ""
+                    ),
+                    "url": result.get("url", "")
+                })
+
             return results
             
         except Exception as e:
@@ -183,26 +188,30 @@ class YouComClient:
             )
             response.raise_for_status()
             data = response.json()
-            
-            # Extract LLM-ready answer and citations
+
+            # /v1/search returns {results: {web: [{url, title, description, snippets}]}}
+            raw = data.get("results", {})
+            web_list = raw.get("web", []) if isinstance(raw, dict) else raw
+
             answer = ""
             results = []
             citations = []
-            
-            if "results" in data and data["results"]:
-                # Use first result as primary answer
-                first = data["results"][0]
-                answer = first.get("description", "")
-                
-                # Collect results with citations
-                for result in data["results"][:3]:
+
+            if web_list:
+                first = web_list[0]
+                # Prefer snippets (richer context) over description for the answer
+                snippets = first.get("snippets", [])
+                answer = snippets[0] if snippets else first.get("description", "")
+
+                for result in web_list[:3]:
+                    snips = result.get("snippets", [])
                     results.append({
                         "title": result.get("title", ""),
-                        "snippet": result.get("description", ""),
+                        "snippet": snips[0] if snips else result.get("description", ""),
                         "url": result.get("url", "")
                     })
                     citations.append(result.get("url", ""))
-            
+
             return {
                 "answer": answer or "I found some information about that.",
                 "results": results,
