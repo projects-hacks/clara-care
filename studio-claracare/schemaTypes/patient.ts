@@ -67,18 +67,13 @@ export const patient = defineType({
       name: 'callSchedule',
       title: 'Call Schedule',
       type: 'object',
+      description: 'Uses the timezone from Location above',
       fields: [
         defineField({
           name: 'preferredTime',
           type: 'string',
           title: 'Preferred Time',
           description: 'e.g., 10:00 AM',
-        }),
-        defineField({
-          name: 'timezone',
-          type: 'string',
-          title: 'Timezone',
-          description: 'e.g., America/Los_Angeles',
         }),
       ],
     }),
@@ -109,12 +104,42 @@ export const patient = defineType({
         }),
       ],
     }),
-    // Family contacts (array of references)
+    // Family contacts (inline objects — single source of truth)
     defineField({
       name: 'familyContacts',
       title: 'Family Contacts',
       type: 'array',
-      of: [defineArrayMember({ type: 'reference', to: [{ type: 'familyMember' }] })],
+      of: [
+        defineArrayMember({
+          type: 'object',
+          name: 'familyContact',
+          title: 'Family Contact',
+          fields: [
+            defineField({ name: 'name', type: 'string', title: 'Name', validation: (rule) => rule.required() }),
+            defineField({ name: 'email', type: 'string', title: 'Email', validation: (rule) => rule.required().email() }),
+            defineField({ name: 'phone', type: 'string', title: 'Phone' }),
+            defineField({
+              name: 'relationship',
+              type: 'string',
+              title: 'Relationship',
+              description: 'e.g., Daughter, Son',
+            }),
+            defineField({
+              name: 'notificationPreferences',
+              title: 'Notification Preferences',
+              type: 'object',
+              fields: [
+                defineField({ name: 'dailyDigest', type: 'boolean', title: 'Daily Digest', initialValue: true }),
+                defineField({ name: 'instantAlerts', type: 'boolean', title: 'Instant Alerts', initialValue: true }),
+                defineField({ name: 'weeklyReport', type: 'boolean', title: 'Weekly Report', initialValue: false }),
+              ],
+            }),
+          ],
+          preview: {
+            select: { title: 'name', subtitle: 'relationship' },
+          },
+        }),
+      ],
     }),
     // Preferences (nested object with string arrays)
     defineField({

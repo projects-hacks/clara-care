@@ -213,24 +213,40 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
             # Pass 2 — persona token substitution
             _PERSONA_REPLACEMENTS = [
                 # Specific compound labels first (longest match first)
-                (r"(?:the )?host and (?:the )?caller", pname),
+                (r"(?:the )?host and (?:the )?caller", f"Clara and {pname}"),
+                (r"(?:the )?caller and (?:the )?host", f"Clara and {pname}"),
                 (r"the elderly (?:adult|patient|woman|man)", pname),
                 (r"the host", "Clara"),
                 (r"the customer", pname),
                 (r"the caller", pname),
+                (r"(?:a |the )?representative", "Clara"),
+                (r"(?:a |the )?agent", "Clara"),
                 # Pronoun clean-up for sentences starting with "They"
-                (r"^They ", f"{pname} "),
+                (r"^They ", f"Clara and {pname} "),
                 # Strip any leftover persona parenthetical
                 (r"\s*\(an AI companion\)", ""),
-                (r"\bClara\b", "the companion"),
             ]
             for pat, replacement in _PERSONA_REPLACEMENTS:
                 summary = re.sub(pat, replacement, summary, flags=re.IGNORECASE)
+            
+            # Pass 3 — ensure summary mentions both Clara and the patient
+            # If the summary doesn't start with "Clara and {name}",
+            # prepend it for consistency
+            if pname.lower() not in summary.lower() and pname != "She":
+                summary = f"Clara and {pname} discussed: {summary}"
+            elif "clara" not in summary.lower():
+                summary = f"Clara and {pname}: {summary}"
 
             # Capitalise first letter + normalise whitespace
             summary = re.sub(r"\s{2,}", " ", summary).strip()
             if summary and not summary[0].isupper():
                 summary = summary[0].upper() + summary[1:]
+            
+            # ── Grounding validation ───────────────────────────────────
+            # Deepgram sometimes hallucinates entire topics (gardening,
+            # comedy movies, medication refills) that never appeared in
+            # the transcript. Validate and reject if too much is fabricated.
+            summary = _validate_summary_grounding(summary, transcript, patient_name)
             
             # ── Extract topics ──────────────────────────────────────────
             # Trust Deepgram's semantic topic extraction — the model already
@@ -342,13 +358,13 @@ def _elder_care_analysis(transcript: str, medications: list[str]) -> dict:
 
 def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict | None = None) -> dict:
     """Merge Deepgram intelligence with elder-care analysis into unified result."""
+    ctx = patient_context or {}
+    pname = ctx.get("preferred_name") or ctx.get("name", "").split()[0] if ctx.get("name") else "The patient"
     
-    # Summary: prefer Deepgram, fall back to basic extraction
+    # Summary: prefer Deepgram, fall back to safe keyword-based extraction
     summary = dg.get("summary", "")
     if not summary:
-        patient_text = _extract_patient_text(transcript)
-        meaningful = [m.strip() for m in patient_text.split(".") if len(m.strip()) > 10][:3]
-        summary = ". ".join(meaningful) + "." if meaningful else "Brief check-in call."
+        summary = _build_safe_summary(transcript, pname)
     
     # Mood: map Deepgram sentiment to our mood categories, override if safety/loneliness
     safety_flags = care.get("safety_flags", [])
@@ -421,6 +437,146 @@ def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────────
+
+# Common words to ignore when checking grounding (not meaningful content)
+_STOP_WORDS = {
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+    "with", "by", "from", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could", "should",
+    "may", "might", "shall", "can", "that", "this", "these", "those", "it", "its",
+    "i", "me", "my", "we", "our", "you", "your", "he", "him", "his", "she", "her",
+    "they", "them", "their", "who", "whom", "which", "what", "where", "when", "how",
+    "not", "no", "nor", "so", "if", "then", "than", "too", "very", "just", "about",
+    "also", "up", "out", "all", "some", "any", "each", "every", "both", "few",
+    "more", "most", "other", "into", "over", "after", "before", "between", "under",
+    "again", "further", "once", "here", "there", "why", "because", "as", "until",
+    "while", "during", "well", "much", "many", "still", "really", "quite",
+    "mentioned", "discussed", "talked", "shared", "said", "told", "asked",
+    "describes", "summarizes", "caller", "host", "call", "phone", "conversation",
+    "wellness", "mood", "feeling", "seems", "appears",
+}
+
+
+def _validate_summary_grounding(summary: str, transcript: str, patient_name: str = "") -> str:
+    """
+    Validate that a Deepgram-generated summary is grounded in the transcript.
+    
+    If too many content words in the summary don't appear anywhere in the
+    transcript, the summary is hallucinated. Replace it with a safe fallback.
+    """
+    if not summary:
+        return _build_safe_summary(transcript, patient_name)
+    
+    transcript_lower = transcript.lower()
+    
+    # Extract content words from the summary (skip stop words and short words)
+    summary_words = re.findall(r"[a-zA-Z]+", summary.lower())
+    content_words = [
+        w for w in summary_words
+        if w not in _STOP_WORDS and len(w) > 3
+    ]
+    
+    if not content_words:
+        return summary  # Nothing meaningful to validate
+    
+    # Check how many content words appear in the transcript
+    grounded = sum(1 for w in content_words if w in transcript_lower)
+    grounded_ratio = grounded / len(content_words)
+    
+    if grounded_ratio < 0.60:
+        # More than 40% of content words are hallucinated
+        logger.warning(
+            f"[HALLUCINATION_DETECTED] Deepgram summary grounding={grounded_ratio:.0%} "
+            f"({grounded}/{len(content_words)} words found in transcript). "
+            f"Replacing with safe fallback. Original: {summary[:200]}"
+        )
+        return _build_safe_summary(transcript, patient_name)
+    
+    return summary
+
+
+def _build_safe_summary(transcript: str, patient_name: str = "") -> str:
+    """
+    Build a minimal, honest summary directly from patient utterances.
+    Used as a fallback when Deepgram's summary is hallucinated.
+    Format: 'Clara and {name} discussed...' / '{name} mentioned...'
+    """
+    patient_text = _extract_patient_text(transcript)
+    name = patient_name or "The patient"
+    
+    if not patient_text or len(patient_text.strip()) < 10:
+        return f"Clara and {name} had a brief check-in call."
+    
+    # Extract key topics from what the patient actually said
+    patient_lower = patient_text.lower()
+    discussed_topics = []  # Things they discussed together
+    patient_feelings = []  # How the patient was feeling
+    patient_actions = []   # What the patient mentioned doing
+    
+    # Feelings
+    feeling_keywords = {
+        "good": "feeling good",
+        "well": "feeling well",
+        "happy": "feeling happy",
+        "better": "feeling better",
+        "tired": "feeling tired",
+        "lonely": "feeling lonely",
+        "sad": "feeling sad",
+        "okay": "doing okay",
+    }
+    for keyword, desc in feeling_keywords.items():
+        if keyword in patient_lower and desc not in patient_feelings:
+            patient_feelings.append(desc)
+    
+    # Discussion topics
+    topic_keywords = {
+        "lunch": "lunch plans",
+        "dinner": "dinner plans",
+        "restaurant": "finding a restaurant",
+        "friend": "meeting with friends",
+        "daughter": "her daughter",
+        "son": "her son",
+        "family": "family",
+        "doctor": "talking to her doctor",
+        "sleep": "how she slept",
+        "weather": "the weather",
+        "medication": "medication",
+        "medicine": "medication",
+        "walk": "going for a walk",
+        "garden": "gardening",
+        "cook": "cooking",
+        "pain": "pain",
+        "work": "things to do",
+        "call": "wanting to connect with family",
+        "miss": "missing someone",
+        "quesadilla": "food preferences",
+        "mexican": "Mexican food",
+        "chicken": "food preferences",
+    }
+    for keyword, desc in topic_keywords.items():
+        if keyword in patient_lower and desc not in discussed_topics:
+            discussed_topics.append(desc)
+    
+    # Build the summary
+    parts = []
+    
+    if discussed_topics:
+        topics_str = ", ".join(discussed_topics[:3])
+        parts.append(f"Clara and {name} discussed {topics_str}")
+    
+    if patient_feelings:
+        feeling = patient_feelings[0]
+        parts.append(f"{name} was {feeling}")
+    
+    if parts:
+        return ". ".join(parts) + "."
+    
+    # Ultra-safe fallback
+    word_count = len(patient_text.split())
+    if word_count > 50:
+        return f"Clara and {name} had an engaged conversation during today's check-in."
+    return f"Clara and {name} had a brief check-in call."
+
 
 def _extract_patient_text(transcript: str) -> str:
     """Extract all patient-side utterances from transcript."""

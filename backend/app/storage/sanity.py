@@ -121,9 +121,11 @@ class SanityDataStore:
             },
         }
         if call_sched:
+            # timezone comes from location, not callSchedule (removed duplicate)
+            loc = doc.get("location", {}) or {}
             result["call_schedule"] = {
                 "preferred_time": call_sched.get("preferredTime"),
-                "timezone": call_sched.get("timezone"),
+                "timezone": loc.get("timezone"),
             }
         # Family contacts
         raw_contacts = doc.get("familyContacts", [])
@@ -274,27 +276,6 @@ class SanityDataStore:
             if not patient:
                 return None
             
-            # Always query standalone familyMember docs if inline contacts are empty or have no useful data
-            existing_contacts = patient.get("family_contacts") or []
-            has_useful_contacts = any(
-                c.get("name") and c.get("email") for c in existing_contacts
-            )
-            
-            if not has_useful_contacts:
-                try:
-                    fm_result = await self._query_groq(
-                        '*[_type == "familyMember" && $pid in patients[]._ref]',
-                        {"pid": patient_id},
-                    )
-                    fm_docs = fm_result.get("result") or []
-                    if fm_docs:
-                        patient["family_contacts"] = [
-                            self._map_family_contact(fc) for fc in fm_docs if fc
-                        ]
-                        logger.info(f"Found {len(fm_docs)} family members for {patient_id}")
-                except Exception as e:
-                    logger.error(f"Error fetching family members for {patient_id}: {e}")
-            
             return patient
         except Exception as exc:
             logger.error(f"get_patient failed for {patient_id}: {exc}")
@@ -321,7 +302,6 @@ class SanityDataStore:
                 cs = updates["call_schedule"]
                 sanity_set["callSchedule"] = {
                     "preferredTime": cs.get("preferred_time"),
-                    "timezone": cs.get("timezone"),
                 }
             if "medications" in updates:
                 sanity_set["medications"] = [
@@ -598,19 +578,19 @@ class SanityDataStore:
     # =========================================================================
 
     async def get_family_contacts(self, patient_id: str) -> list[dict]:
+        """Get family contacts from the patient document (single source of truth)."""
         try:
-            # First try inline familyContacts on the patient document
             patient = await self.get_patient(patient_id)
-            if patient:
-                inline = patient.get("family_contacts") or []
-                if inline and any(c.get("email") for c in inline):
-                    return inline
-            # Fallback: standalone familyMember documents
-            result = await self._query_groq(
-                '*[_type == "familyMember" && $pid in patients[]._ref]',
-                {"pid": patient_id},
+            if not patient:
+                logger.warning(f"No patient found for {patient_id}, cannot get contacts")
+                return []
+            
+            contacts = patient.get("family_contacts") or []
+            logger.info(
+                f"Family contacts for {patient_id}: {len(contacts)} contact(s) — "
+                f"{[c.get('email') for c in contacts if c.get('email')]}"
             )
-            return [self._map_family_contact(c) for c in (result.get("result") or []) if c]
+            return contacts
         except Exception as exc:
             logger.error(f"get_family_contacts failed: {exc}")
             return []
