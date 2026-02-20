@@ -274,13 +274,28 @@ class CognitivePipeline:
         # 1. Use the summary as the first highlight — clean it up
         if summary and len(summary) > 10:
             clean = summary.strip()
-            # Strip any system/prompt preamble that leaked through
-            for noise in [
+            # Strip any system/prompt preamble or Deepgram structural sentences
+            _NOISE = [
                 "A wellness check-in phone call between Clara",
                 "between Clara (an AI companion)",
                 "Summarizing the call,",
                 "an AI companion",
-            ]:
+                # Deepgram generic-label preambles
+                "A caller and a host discuss",
+                "A caller and the host discuss",
+                "A customer and a host discuss",
+                "A customer and the host discuss",
+                "They discuss the importance",
+                "They also talk about",
+                "They discuss",
+            ]
+            for noise in _NOISE:
+                if clean.lower().startswith(noise.lower()):
+                    # Drop the first sentence entirely when it's a meta-sentence
+                    first_dot = clean.find('.')
+                    if first_dot != -1:
+                        clean = clean[first_dot + 1:].strip()
+            for noise in _NOISE:
                 clean = clean.replace(noise, "").strip()
             if clean and not clean.endswith(('.', '!', '?')):
                 clean += '.'

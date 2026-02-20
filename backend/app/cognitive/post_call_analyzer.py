@@ -163,21 +163,51 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
             summary_info = results.get("summary") or {}
             summary = summary_info.get("text", "")
             
-            # Replace generic Deepgram labels with patient name / pronouns
-            pname = patient_name or "She"
-            replacements = [
-                ("The host and caller", pname),
-                ("The host and the caller", pname),
-                ("the host", "Clara"),
-                ("the customer", "she"),
-                ("the caller", "she"),
-                ("Clara", "the companion"),
+            # ── Clean Deepgram summary ──────────────────────────────────
+            # Deepgram summarises using generic labels ('the caller',
+            # 'a host', 'the elderly adult') and sometimes opens with a
+            # meta-sentence describing the call format.
+            # We clean in two passes:
+            #   1. Strip whole sentences that describe the call *setup*
+            #      ('A caller and a host discuss a wellness phone call...')
+            #   2. Replace remaining generic tokens with patient name / pronouns
+
+            pname = patient_name or "She"  # preferred name or pronoun fallback
+
+            # Pass 1 — strip structural preamble sentences
+            _PREAMBLE_PATTERNS = [
+                r"A caller and (?:a |the )?host discuss(?:es)? (?:a |the )?wellness (?:phone )?call[^.]*\.\s*",
+                r"A (?:caller|customer) and (?:a |the )?host [^.]+\.\s*",
+                r"(?:They|The host and (?:the )?caller) discuss(?:es)? [^.]+\.\s*",
+                r"(?:They|The host and (?:the )?caller) (?:also )?talk(?:s)? about [^.]+\.\s*",
+                r"A wellness (?:check-in |phone )?call (?:between|with) [^.]+\.\s*",
+                r"The following is a transcript[^.]*\.\s*",
+                r"Summarize only what the PATIENT[^.]*\.\s*",
             ]
-            for generic, replacement in replacements:
-                summary = re.sub(
-                    re.escape(generic), replacement, summary, flags=re.IGNORECASE
-                )
+            for pat in _PREAMBLE_PATTERNS:
+                summary = re.sub(pat, "", summary, flags=re.IGNORECASE).strip()
+
+            # Pass 2 — persona token substitution
+            _PERSONA_REPLACEMENTS = [
+                # Specific compound labels first (longest match first)
+                (r"(?:the )?host and (?:the )?caller", pname),
+                (r"the elderly (?:adult|patient|woman|man)", pname),
+                (r"the host", "Clara"),
+                (r"the customer", pname),
+                (r"the caller", pname),
+                # Pronoun clean-up for sentences starting with "They"
+                (r"^They ", f"{pname} "),
+                # Strip any leftover persona parenthetical
+                (r"\s*\(an AI companion\)", ""),
+                (r"\bClara\b", "the companion"),
+            ]
+            for pat, replacement in _PERSONA_REPLACEMENTS:
+                summary = re.sub(pat, replacement, summary, flags=re.IGNORECASE)
+
+            # Capitalise first letter + normalise whitespace
             summary = re.sub(r"\s{2,}", " ", summary).strip()
+            if summary and not summary[0].isupper():
+                summary = summary[0].upper() + summary[1:]
             
             # ── Extract topics ──────────────────────────────────────────
             # Trust Deepgram's semantic topic extraction — the model already

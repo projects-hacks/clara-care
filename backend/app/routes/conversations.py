@@ -57,7 +57,12 @@ _SUMMARY_NOISE = [
     re.compile(r"^Clara asks[^.]+\.\s*", re.I | re.M),
     # "A customer named Clara talks to <name> about..." style preamble
     re.compile(r"A customer named Clara[^.]+\.\s*", re.I),
-    # "They discuss her usual activities..." opener
+    # --- Deepgram generic-label structural preambles ---
+    # "A caller and a host discuss a wellness phone call with an elderly adult."
+    re.compile(r"A (?:caller|customer) and (?:a |the )?host discuss(?:es)?[^.]+\.\s*", re.I),
+    # "They discuss the importance of..." / "They also talk about..."
+    re.compile(r"^(?:They|The host and (?:the )?caller) (?:also )?(?:discuss(?:es)?|talk(?:s)? about)[^.]+\.\s*", re.I | re.M),
+    # "They discuss" mid-sentence (leftover)
     re.compile(r"^They discuss [^.]+\.\s*", re.I),
     # "Patient discussed:" fallback prefix
     re.compile(r"^Patient discussed:\s*", re.I),
@@ -100,12 +105,16 @@ def _clean_summary(raw: str) -> str:
 
     # Replace remaining inline "Clara" references
     text = _CLARA_REF.sub("the companion", text)
+    # Replace Deepgram generic persona labels → pronouns
+    text = re.sub(r"\bthe elderly (?:adult|patient|woman|man)\b", "she", text, flags=re.I)
+    text = re.sub(r"\bthe (?:caller|customer|host and (?:the )?caller)\b", "she", text, flags=re.I)
     # Replace "The patient" (sentence start) → "She"
     text = _THE_PATIENT_SUBJECT.sub("She", text)
     # Replace "the patient" (mid-sentence) → "her"
     text = _THE_PATIENT_OBJECT.sub("her", text)
     # Replace "their" → "her" (patient is female)
     text = _THEIR_POSSESSIVE.sub("her", text)
+
 
     # Clean up spacing artefacts
     text = re.sub(r"\s{2,}", " ", text).strip()
