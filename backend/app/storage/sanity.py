@@ -197,6 +197,7 @@ class SanityDataStore:
             "alert_type": doc.get("alertType"),
             "severity": doc.get("severity"),
             "description": doc.get("description"),
+            "suggested_action": doc.get("suggestedAction"),
             "related_metrics": doc.get("relatedMetrics"),
             "timestamp": doc.get("timestamp"),
             "acknowledged": doc.get("acknowledged", False),
@@ -517,12 +518,12 @@ class SanityDataStore:
         try:
             if severity:
                 result = await self._query_groq(
-                    f'*[_type == "alert" && patient._ref == $pid && severity == $sev] | order(timestamp desc) [{offset}...{end}]',
+                    f'*[_type == "alert" && patient._ref == $pid && severity == $sev] | order(acknowledged asc, timestamp desc) [{offset}...{end}]',
                     {"pid": patient_id, "sev": severity},
                 )
             else:
                 result = await self._query_groq(
-                    f'*[_type == "alert" && patient._ref == $pid] | order(timestamp desc) [{offset}...{end}]',
+                    f'*[_type == "alert" && patient._ref == $pid] | order(acknowledged asc, timestamp desc) [{offset}...{end}]',
                     {"pid": patient_id},
                 )
             return [self._map_alert(a) for a in (result.get("result") or []) if a]
@@ -540,6 +541,7 @@ class SanityDataStore:
                 "alertType": alert.get("alert_type"),
                 "severity": alert.get("severity"),
                 "description": alert.get("description"),
+                "suggestedAction": alert.get("suggested_action"),
                 "relatedMetrics": alert.get("related_metrics"),
                 "timestamp": alert.get("timestamp"),
                 "acknowledged": alert.get("acknowledged", False),
