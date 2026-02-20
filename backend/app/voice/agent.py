@@ -120,7 +120,20 @@ class DeepgramVoiceAgent:
                     "provider": {
                         "type": "deepgram",
                         "model": "nova-3"
-                    }
+                    },
+                    # Endpointing: 500ms works best for elderly speakers
+                    # who pause mid-thought. Prevents premature turn-taking.
+                    "endpointing": 500,
+                    # Only react to finalized turns, not fragments
+                    "interim_results": False,
+                    # Keyterm prompting: bias toward elder-care terms
+                    "keyterms": [
+                        "Lisinopril", "Metformin", "Amlodipine",
+                        "Atorvastatin", "Omeprazole", "Levothyroxine",
+                        "blood pressure", "cholesterol", "diabetes",
+                        "gardening", "pumpkin", "knitting",
+                        "grandchildren", "Clara", "medication"
+                    ]
                 },
                 "think": {
                     "provider": {
