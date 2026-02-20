@@ -2,12 +2,20 @@
 Cognitive Health Report Generator
 Creates downloadable PDF reports for families
 Uses Foxit PDF Services API (HTML → PDF) as primary path
+Uses Gemini LLM for executive summary generation
 Falls back to Foxit Document Generation API or mock PDF
 """
 
 import logging
+import os
 from datetime import datetime, UTC, date
 from typing import Dict, Any, List, Optional
+
+try:
+    import google.generativeai as genai
+    _GEMINI_AVAILABLE = True
+except ImportError:
+    _GEMINI_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +106,20 @@ class ReportGenerator:
 
             # Recommendations
             "recommendations": self._generate_recommendations(trends, alerts, baseline),
+
+            # Gemini executive summary
+            "executive_summary": self._generate_executive_summary(template_data_partial={
+                "patient_name": patient.get("name", "Unknown"),
+                "cognitive_score": cognitive_score,
+                "trend": trend_direction,
+                "total_alerts": len(alerts),
+                "total_conversations": len(conversations),
+                "avg_vocabulary": self._average_metric(trends, "vocabulary_diversity"),
+                "avg_coherence": self._average_metric(trends, "topic_coherence"),
+                "avg_repetition": self._average_metric(trends, "repetition_rate"),
+                "conversations": conversations[:5],
+                "report_period_days": days,
+            }),
         }
 
         # 8. Try PDF Services API first (HTML → PDF) ─ primary path
@@ -330,6 +352,13 @@ class ReportGenerator:
             </div>
         </div>
 
+        <div class="section" style="background:#f0fdf4;border-radius:8px;padding:16px 20px;border-left:4px solid #22c55e;">
+            <div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:8px;">Executive Summary</div>
+            <div style="font-size:13px;color:#374151;line-height:1.7;">
+                {data.get('executive_summary', 'Not enough data to generate a summary.')}
+            </div>
+        </div>
+
         <div class="section">
             <div class="section-title">Cognitive Metrics</div>
             <table>
@@ -519,6 +548,76 @@ class ReportGenerator:
             recommendations.append("• Maintain current care routine")
 
         return "\n".join(recommendations)
+
+    def _generate_executive_summary(self, template_data_partial: dict) -> str:
+        """
+        Generate a warm, family-friendly executive summary using Gemini LLM.
+        This appears at the top of the PDF report.
+        """
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key or not _GEMINI_AVAILABLE:
+            return self._fallback_executive_summary(template_data_partial)
+
+        d = template_data_partial
+        convos = d.get("conversations", [])
+        convo_summaries = "\n".join(
+            f"  - {c.get('timestamp', '')[:10]}: {c.get('summary', 'Check-in call')} (mood: {c.get('detected_mood', 'neutral')})"
+            for c in convos
+        ) or "  No recent conversations available."
+
+        prompt = f"""You are writing an executive summary for a cognitive health report about {d['patient_name']}, prepared for their family.
+
+DATA:
+- Overall cognitive score: {d['cognitive_score']}/100
+- Trend: {d['trend']}
+- Period: Last {d['report_period_days']} days
+- Total conversations: {d['total_conversations']}
+- Total alerts: {d['total_alerts']}
+- Avg vocabulary diversity: {d['avg_vocabulary']:.2f}
+- Avg topic coherence: {d['avg_coherence']:.2f}
+- Avg repetition rate: {d['avg_repetition']:.2f}
+
+Recent conversations:
+{convo_summaries}
+
+Write a 3-4 sentence executive summary for the family. Rules:
+- Warm, non-clinical language — write like a caring nurse briefing the family
+- Mention {d['patient_name']} by name
+- Highlight key trends (improving/stable/declining) and what they mean practically
+- If declining, be honest but compassionate — suggest next steps
+- If stable/improving, be reassuring
+- Do NOT mention "AI", "Clara", "companion" or technical metrics by name
+- Keep under 80 words"""
+
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel("gemini-3-flash-preview")
+            response = model.generate_content(prompt)
+            summary = response.text.strip().strip('"').strip("'")
+            logger.info(f"[GEMINI] Executive summary generated ({len(summary)} chars)")
+            return summary
+        except Exception as exc:
+            logger.warning(f"[GEMINI] Executive summary failed: {exc}")
+            return self._fallback_executive_summary(template_data_partial)
+
+    def _fallback_executive_summary(self, data: dict) -> str:
+        """Simple fallback executive summary without Gemini."""
+        name = data.get("patient_name", "Your loved one")
+        score = data.get("cognitive_score", 0)
+        trend = data.get("trend", "stable")
+
+        if score >= 70:
+            return (f"{name}'s cognitive health looks good overall. "
+                    f"Conversations have been flowing naturally with healthy engagement. "
+                    f"Continue regular daily check-ins to maintain this positive trend.")
+        elif score >= 40:
+            return (f"{name}'s cognitive health is showing some areas worth watching. "
+                    f"While most conversations are comfortable, there are a few patterns "
+                    f"that may be worth discussing at the next doctor visit.")
+        else:
+            return (f"{name}'s recent conversations suggest some changes in cognitive patterns "
+                    f"that deserve attention. Consider scheduling a conversation with "
+                    f"the healthcare provider to discuss these trends.")
 
     def _error_pdf(self, error_message: str) -> bytes:
         """Generate error PDF"""

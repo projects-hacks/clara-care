@@ -1,8 +1,11 @@
 """
-Post-Call Analyzer — Deepgram Text Intelligence + Elder-Care Keyword Analysis
+Post-Call Analyzer — Gemini + Deepgram Text Intelligence + Elder-Care Keyword Analysis
 
-Uses Deepgram's built-in Text Intelligence API for:
-  - Summarization
+Uses Gemini LLM (gemini-3-flash-preview) for:
+  - Call summary generation (warm, family-friendly, context-aware)
+  - Detailed wellness highlights
+
+Uses Deepgram's Text Intelligence API for:
   - Sentiment analysis  
   - Topic detection
   - Intent recognition
@@ -12,8 +15,6 @@ Then layers elder-care-specific keyword analysis for:
   - Medication tracking
   - Loneliness / desire to connect
   - Mood refinement
-
-No OpenAI API key required — uses the existing DEEPGRAM_API_KEY.
 """
 
 import json
@@ -23,6 +24,12 @@ import re
 from typing import Optional
 
 import httpx
+
+try:
+    import google.generativeai as genai
+    _GEMINI_AVAILABLE = True
+except ImportError:
+    _GEMINI_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +120,12 @@ async def analyze_transcript(
             "She gave conflicting answers during the call, which may be worth watching."
         )
     
+    # 3.5 Generate rich summary via Gemini (replaces Deepgram's generic one)
+    gemini_summary = await _gemini_summarize(transcript, patient_context=ctx)
+    if gemini_summary:
+        dg_analysis["summary"] = gemini_summary
+        logger.info("[POST_CALL] Using Gemini-generated summary instead of Deepgram")
+    
     # 4. Merge into unified result
     result = _merge_analysis(dg_analysis, care_analysis, transcript, patient_context=ctx)
     result["memory_inconsistency"] = memory_flags
@@ -129,32 +142,21 @@ async def analyze_transcript(
 
 
 async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
-    """Call Deepgram's /v1/read endpoint for text intelligence."""
+    """
+    Call Deepgram's /v1/read endpoint for text intelligence.
+    NOTE: Deepgram is used ONLY for sentiment, topics, and intents.
+    Summarization is handled by Gemini for higher quality.
+    """
     api_key = os.getenv("DEEPGRAM_API_KEY")
     if not api_key:
         logger.warning("DEEPGRAM_API_KEY not set — skipping Deepgram analysis")
         return {}
-    
-    # Context prefix so Deepgram understands the conversation structure
-    # IMPORTANT: Be extremely restrictive to prevent hallucinated summaries.
-    # Deepgram sometimes generates content about topics never discussed
-    # (e.g. gardening, comedy movies) when the prompt is too loose.
-    context_prefix = (
-        "Below is a verbatim phone call transcript between a companion named Clara "
-        "and an elderly patient. Summarize ONLY what the PATIENT actually said — "
-        "their mood, topics THEY brought up, and anything noteworthy THEY mentioned. "
-        "Do NOT add, infer, or fabricate any details not explicitly present in the transcript. "
-        "Do NOT mention topics that were not discussed. Write 2-3 concise sentences "
-        "in third person, as if briefing a family member.\n\n"
-    )
-    transcript_for_analysis = context_prefix + transcript
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 "https://api.deepgram.com/v1/read",
                 params={
-                    "summarize": "true",
                     "sentiment": "true",
                     "topics": "true",
                     "intents": "true",
@@ -164,96 +166,19 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
                     "Authorization": f"Token {api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"text": transcript_for_analysis},
+                json={"text": transcript},
             )
             response.raise_for_status()
             data = response.json()
             
             results = data.get("results", {})
             
-            # Log raw response at DEBUG level so we can inspect what
-            # topics/intents Deepgram actually returns and refine our maps.
             logger.debug(
                 "[DEEPGRAM_RAW] %s",
                 json.dumps(results, indent=2, default=str)[:4000]
             )
             
-            # ── Extract summary ─────────────────────────────────────────
-            # Deepgram's summarization may use generic nouns ("the customer",
-            # "the caller").  We do *minimal* cleanup here — just the 3 most
-            # common persona references — because the exact wording isn't
-            # guaranteed by the API and heavy regex risks silent breakage.
-            summary_info = results.get("summary") or {}
-            summary = summary_info.get("text", "")
-            
-            # ── Clean Deepgram summary ──────────────────────────────────
-            # Deepgram summarises using generic labels ('the caller',
-            # 'a host', 'the elderly adult') and sometimes opens with a
-            # meta-sentence describing the call format.
-            # We clean in two passes:
-            #   1. Strip whole sentences that describe the call *setup*
-            #      ('A caller and a host discuss a wellness phone call...')
-            #   2. Replace remaining generic tokens with patient name / pronouns
-
-            pname = patient_name or "She"  # preferred name or pronoun fallback
-
-            # Pass 1 — strip structural preamble sentences
-            _PREAMBLE_PATTERNS = [
-                r"A caller and (?:a |the )?host discuss(?:es)? (?:a |the )?wellness (?:phone )?call[^.]*\.\s*",
-                r"A (?:caller|customer) and (?:a |the )?host [^.]+\.\s*",
-                r"(?:They|The host and (?:the )?caller) discuss(?:es)? [^.]+\.\s*",
-                r"(?:They|The host and (?:the )?caller) (?:also )?talk(?:s)? about [^.]+\.\s*",
-                r"A wellness (?:check-in |phone )?call (?:between|with) [^.]+\.\s*",
-                r"The following is a transcript[^.]*\.\s*",
-                r"Summarize only what the PATIENT[^.]*\.\s*",
-            ]
-            for pat in _PREAMBLE_PATTERNS:
-                summary = re.sub(pat, "", summary, flags=re.IGNORECASE).strip()
-
-            # Pass 2 — persona token substitution
-            _PERSONA_REPLACEMENTS = [
-                # Specific compound labels first (longest match first)
-                (r"(?:the )?host and (?:the )?caller", f"Clara and {pname}"),
-                (r"(?:the )?caller and (?:the )?host", f"Clara and {pname}"),
-                (r"(?:the )?companion and (?:the )?caller", f"Clara and {pname}"),
-                (r"the elderly (?:adult|patient|woman|man)", pname),
-                (r"(?:the |an? )?(?:AI )?companion", "Clara"),
-                (r"the host", "Clara"),
-                (r"the customer", pname),
-                (r"the caller", pname),
-                (r"(?:a |the )?representative", "Clara"),
-                (r"(?:a |the )?agent", "Clara"),
-                # Pronoun clean-up for sentences starting with "They"
-                (r"^They ", f"Clara and {pname} "),
-                # Strip any leftover persona parenthetical
-                (r"\s*\(an AI companion\)", ""),
-            ]
-            for pat, replacement in _PERSONA_REPLACEMENTS:
-                summary = re.sub(pat, replacement, summary, flags=re.IGNORECASE)
-            
-            # Pass 3 — ensure summary mentions both Clara and the patient
-            # If the summary doesn't start with "Clara and {name}",
-            # prepend it for consistency
-            if pname.lower() not in summary.lower() and pname != "She":
-                summary = f"Clara and {pname} discussed: {summary}"
-            elif "clara" not in summary.lower():
-                summary = f"Clara and {pname}: {summary}"
-
-            # Capitalise first letter + normalise whitespace
-            summary = re.sub(r"\s{2,}", " ", summary).strip()
-            if summary and not summary[0].isupper():
-                summary = summary[0].upper() + summary[1:]
-            
-            # ── Grounding validation ───────────────────────────────────
-            # Deepgram sometimes hallucinates entire topics (gardening,
-            # comedy movies, medication refills) that never appeared in
-            # the transcript. Validate and reject if too much is fabricated.
-            summary = _validate_summary_grounding(summary, transcript, patient_name)
-            
             # ── Extract topics ──────────────────────────────────────────
-            # Trust Deepgram's semantic topic extraction — the model already
-            # understands context.  Our elder-care keywords (safety, meds,
-            # loneliness) are layered on top in _merge_analysis.
             topics_data = results.get("topics", {}).get("segments", [])
             topics: list[str] = []
             for seg in topics_data:
@@ -268,8 +193,6 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
             sentiment_score = sentiments_data.get("sentiment_score", 0)
             
             # ── Extract intents ─────────────────────────────────────────
-            # Pass Deepgram intents through directly — the model already
-            # classifies user intent semantically.
             intents_data = results.get("intents", {}).get("segments", [])
             intents: list[str] = []
             for seg in intents_data:
@@ -279,13 +202,12 @@ async def _deepgram_analyze(transcript: str, patient_name: str = "") -> dict:
                         intents.append(i)
             
             logger.info(
-                f"[DEEPGRAM_INTEL] summary_len={len(summary)}, "
+                f"[DEEPGRAM_INTEL] "
                 f"topics={topics}, sentiment={sentiment}({sentiment_score:.2f}), "
                 f"intents={intents}"
             )
             
             return {
-                "summary": summary,
                 "topics": topics,
                 "sentiment": sentiment,
                 "sentiment_score": sentiment_score,
@@ -358,15 +280,71 @@ def _elder_care_analysis(transcript: str, medications: list[str]) -> dict:
     }
 
 
+async def _gemini_summarize(transcript: str, patient_context: dict | None = None) -> str:
+    """
+    Generate a warm, context-aware summary using Gemini LLM.
+    Returns empty string if Gemini is unavailable or fails.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key or not _GEMINI_AVAILABLE:
+        logger.info("[GEMINI] Skipping — no API key or google-generativeai not installed")
+        return ""
+
+    ctx = patient_context or {}
+    pname = ctx.get("preferred_name") or ctx.get("name", "").split()[0] if ctx.get("name") else "the patient"
+    family_names = ctx.get("family_names", [])
+    interests = ctx.get("interests", [])
+    location = ctx.get("location", "")
+
+    context_block = f"Patient's name: {pname}"
+    if family_names:
+        context_block += f"\nFamily members: {', '.join(family_names)}"
+    if interests:
+        context_block += f"\nKnown interests: {', '.join(interests)}"
+    if location:
+        context_block += f"\nLocation: {location}"
+
+    prompt = f"""You are summarizing a phone conversation between Clara (an AI companion) and {pname}, an elderly person who receives daily wellness check-in calls.
+
+PATIENT CONTEXT:
+{context_block}
+
+TRANSCRIPT:
+{transcript}
+
+Write a warm, natural summary in 4-5 sentences for {pname}'s family members to read on their dashboard. Rules:
+- Write in third person about {pname} (e.g. "{pname} chatted about...")
+- Focus on WHAT they talked about (topics, stories, requests) and HOW {pname} seemed (mood, energy)
+- Use warm, human language — this is for worried family members, not clinicians
+- Do NOT mention "Clara", "AI", "companion", "agent", "the caller", or "the host"
+- Do NOT use clinical language, jargon, or bullet points
+- Keep it under 100 words
+- If {pname} mentioned wanting to talk to family, highlight that"""
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-3-flash-preview")
+        response = model.generate_content(prompt)
+        summary = response.text.strip()
+        # Remove any quotes the model might wrap around the summary
+        summary = summary.strip('"').strip("'").strip()
+        logger.info(f"[GEMINI] Generated summary ({len(summary)} chars): {summary[:100]}...")
+        return summary
+    except Exception as exc:
+        logger.warning(f"[GEMINI] Summary generation failed: {exc}")
+        return ""
+
+
 def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict | None = None) -> dict:
     """Merge Deepgram intelligence with elder-care analysis into unified result."""
     ctx = patient_context or {}
     pname = ctx.get("preferred_name") or ctx.get("name", "").split()[0] if ctx.get("name") else "The patient"
     
-    # Summary: prefer Deepgram, fall back to safe keyword-based extraction
+    # Summary: Gemini LLM generates this (injected into dg dict in analyze_transcript)
     summary = dg.get("summary", "")
     if not summary:
-        summary = _build_safe_summary(transcript, pname)
+        # Minimal fallback if Gemini was unavailable
+        summary = f"{pname} had a check-in call today."
     
     # Mood: map Deepgram sentiment to our mood categories, override if safety/loneliness
     safety_flags = care.get("safety_flags", [])
@@ -438,192 +416,8 @@ def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict
     }
 
 
+
 # ─── Helpers ────────────────────────────────────────────────────────────────────
-
-# Common words to ignore when checking grounding (not meaningful content)
-_STOP_WORDS = {
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
-    "with", "by", "from", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could", "should",
-    "may", "might", "shall", "can", "that", "this", "these", "those", "it", "its",
-    "i", "me", "my", "we", "our", "you", "your", "he", "him", "his", "she", "her",
-    "they", "them", "their", "who", "whom", "which", "what", "where", "when", "how",
-    "not", "no", "nor", "so", "if", "then", "than", "too", "very", "just", "about",
-    "also", "up", "out", "all", "some", "any", "each", "every", "both", "few",
-    "more", "most", "other", "into", "over", "after", "before", "between", "under",
-    "again", "further", "once", "here", "there", "why", "because", "as", "until",
-    "while", "during", "well", "much", "many", "still", "really", "quite",
-    "mentioned", "discussed", "talked", "shared", "said", "told", "asked",
-    "describes", "summarizes", "caller", "host", "call", "phone", "conversation",
-    "wellness", "mood", "feeling", "seems", "appears",
-}
-
-
-def _validate_summary_grounding(summary: str, transcript: str, patient_name: str = "") -> str:
-    """
-    Validate that a Deepgram-generated summary is grounded in the transcript.
-    
-    If too many content words in the summary don't appear anywhere in the
-    transcript, the summary is hallucinated. Replace it with a safe fallback.
-    """
-    if not summary:
-        return _build_safe_summary(transcript, patient_name)
-    
-    transcript_lower = transcript.lower()
-    
-    # Extract content words from the summary (skip stop words and short words)
-    summary_words = re.findall(r"[a-zA-Z]+", summary.lower())
-    content_words = [
-        w for w in summary_words
-        if w not in _STOP_WORDS and len(w) > 3
-    ]
-    
-    if not content_words:
-        return summary  # Nothing meaningful to validate
-    
-    # Check how many content words appear in the transcript
-    grounded = sum(1 for w in content_words if w in transcript_lower)
-    grounded_ratio = grounded / len(content_words)
-    
-    if grounded_ratio < 0.60:
-        # More than 40% of content words are hallucinated
-        logger.warning(
-            f"[HALLUCINATION_DETECTED] Deepgram summary grounding={grounded_ratio:.0%} "
-            f"({grounded}/{len(content_words)} words found in transcript). "
-            f"Replacing with safe fallback. Original: {summary[:200]}"
-        )
-        return _build_safe_summary(transcript, patient_name)
-    
-    return summary
-
-
-def _build_safe_summary(transcript: str, patient_name: str = "") -> str:
-    """
-    Build an enriched, honest summary directly from patient utterances.
-    Used as a fallback when Deepgram's summary is hallucinated.
-    Format: 'Clara and {name} discussed...' / '{name} mentioned...'
-    """
-    patient_text = _extract_patient_text(transcript)
-    name = patient_name or "The patient"
-    
-    if not patient_text or len(patient_text.strip()) < 10:
-        return f"Clara and {name} had a brief check-in call."
-    
-    patient_lower = patient_text.lower()
-    word_count = len(patient_text.split())
-    
-    # ---------- Categorized keyword extraction ----------
-    feelings = []
-    topics = []
-    activities = []    # What the patient did or plans to do
-    requests = []      # What they asked Clara for help with
-    
-    # Feelings
-    feeling_map = {
-        "good": "feeling good", "well": "feeling well", "happy": "feeling happy",
-        "better": "feeling better", "great": "feeling great",
-        "tired": "feeling a bit tired", "lonely": "feeling lonely",
-        "sad": "feeling down", "okay": "doing okay", "fine": "doing fine",
-    }
-    for kw, desc in feeling_map.items():
-        if kw in patient_lower and desc not in feelings:
-            feelings.append(desc)
-    
-    # Activities (things patient did / is doing / plans to do)
-    activity_map = {
-        "reading": "has been reading",
-        "book": "has been enjoying a book",
-        "sci fi": "is into science fiction",
-        "sci-fi": "is into science fiction",
-        "walk": "went for a walk",
-        "garden": "has been gardening",
-        "cook": "did some cooking",
-        "bake": "did some baking",
-        "church": "went to church",
-        "shop": "went shopping",
-        "visit": "had visitors",
-        "watch": "watched something",
-        "exercise": "has been keeping active",
-        "yoga": "has been doing yoga",
-        "paint": "has been painting",
-        "knit": "has been knitting",
-        "puzzle": "worked on a puzzle",
-        "school": "keeps herself busy",
-    }
-    for kw, desc in activity_map.items():
-        if kw in patient_lower and desc not in activities:
-            activities.append(desc)
-    
-    # Requests (what they asked Clara to help with)
-    request_map = {
-        "recommend": "asked Clara for recommendations",
-        "suggest": "asked Clara for suggestions",
-        "restaurant": "looked for restaurant options together",
-        "weather": "checked the weather forecast with Clara",
-        "find": "asked Clara to help find something",
-        "search": "asked Clara to look something up",
-        "tell me": "asked Clara for information",
-    }
-    for kw, desc in request_map.items():
-        if kw in patient_lower and desc not in requests:
-            requests.append(desc)
-    
-    # Discussion topics
-    topic_map = {
-        "lunch": "lunch plans", "dinner": "dinner plans",
-        "breakfast": "morning routine", "restaurant": "dining options",
-        "friend": "friends", "daughter": "her daughter", "son": "her son",
-        "grandchild": "her grandchildren", "family": "family",
-        "doctor": "a doctor visit", "appointment": "an upcoming appointment",
-        "sleep": "sleep", "slept": "how she slept",
-        "medication": "medication", "medicine": "her medication",
-        "weather": "the weather", "rain": "the weather", "sun": "the weather",
-        "pain": "some discomfort", "headache": "a headache",
-        "miss": "missing someone close",
-        "mexican": "Mexican food", "italian": "Italian food",
-        "music": "music", "song": "music",
-        "movie": "movies", "show": "a TV show",
-        "fine dining": "fine dining",
-    }
-    for kw, desc in topic_map.items():
-        if kw in patient_lower and desc not in topics:
-            topics.append(desc)
-    
-    # ---------- Build the narrative ----------
-    parts = []
-    
-    # Opening: what they discussed
-    if topics:
-        topics_str = ", ".join(topics[:4])
-        parts.append(f"Clara and {name} chatted about {topics_str}")
-    
-    # Activities
-    if activities:
-        act = activities[0]
-        parts.append(f"{name} shared that she {act}")
-    
-    # Requests
-    if requests:
-        req = requests[0]
-        parts.append(f"They {req}")
-    
-    # Feelings + engagement
-    if feelings:
-        parts.append(f"Overall, {name} was {feelings[0]}")
-    
-    if parts:
-        summary = ". ".join(parts) + "."
-        # Add engagement colour
-        if word_count > 80:
-            summary += f" She was chatty and engaged throughout the call."
-        elif word_count > 40:
-            summary += f" The conversation had a comfortable, natural flow."
-        return summary
-    
-    # Ultra-safe fallback
-    if word_count > 50:
-        return f"Clara and {name} had an engaged conversation during today's check-in. She seemed comfortable and willing to chat."
-    return f"Clara and {name} had a brief check-in call."
 
 
 def _extract_patient_text(transcript: str) -> str:

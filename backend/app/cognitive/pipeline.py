@@ -1,12 +1,20 @@
 """
 Cognitive Pipeline Orchestrator
 Chains all cognitive processing steps: analyze -> baseline -> alert -> digest
+Uses Gemini LLM for enhanced wellness highlight generation.
 """
 
 import logging
+import os
 import uuid
 from datetime import datetime, date, UTC
 from typing import Optional
+
+try:
+    import google.generativeai as genai
+    _GEMINI_AVAILABLE = True
+except ImportError:
+    _GEMINI_AVAILABLE = False
 
 from .utils import calculate_cognitive_score
 
@@ -265,6 +273,97 @@ class CognitivePipeline:
         return "stable"
     
     def _extract_highlights(self, summary: str, analysis: Optional[dict] = None, metrics: Optional[dict] = None) -> list[str]:
+        """
+        Extract key highlights from conversation summary and analysis data.
+        Uses Gemini LLM for rich, detailed highlights when available.
+        Falls back to rule-based extraction otherwise.
+        """
+        # Try Gemini-powered highlights first
+        gemini_highlights = self._gemini_highlights(summary, analysis, metrics)
+        if gemini_highlights:
+            return gemini_highlights
+        
+        # Fallback: rule-based extraction
+        return self._rule_based_highlights(summary, analysis, metrics)
+    
+    def _gemini_highlights(self, summary: str, analysis: Optional[dict] = None, metrics: Optional[dict] = None) -> list[str]:
+        """
+        Generate detailed, warm wellness highlights using Gemini LLM.
+        """
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key or not _GEMINI_AVAILABLE:
+            return []
+        
+        # Build context for Gemini
+        mood = (analysis or {}).get("mood", "neutral")
+        mood_explanation = (analysis or {}).get("mood_explanation", "")
+        safety_flags = (analysis or {}).get("safety_flags", [])
+        medication_status = (analysis or {}).get("medication_status", {})
+        engagement = (analysis or {}).get("engagement_level", "")
+        desire_to_connect = (analysis or {}).get("desire_to_connect", False)
+        memory_flags = (analysis or {}).get("memory_inconsistency", [])
+        coherence = (metrics or {}).get("topic_coherence")
+        
+        context_lines = [
+            f"Call Summary: {summary}" if summary else "Brief check-in call.",
+            f"Mood: {mood} — {mood_explanation}" if mood_explanation else f"Mood: {mood}",
+            f"Engagement: {engagement}" if engagement else "",
+        ]
+        if medication_status.get("discussed"):
+            notes = medication_status.get("notes", "Medication was discussed.")
+            context_lines.append(f"Medication: {notes}")
+        if safety_flags:
+            context_lines.append(f"⚠️ Safety concern flagged: {safety_flags[0]}")
+        if desire_to_connect:
+            context_lines.append("She expressed wanting to connect with family.")
+        if memory_flags:
+            context_lines.append("She gave conflicting answers during the call.")
+        if coherence is not None and coherence < 0.40:
+            context_lines.append(f"Conversation coherence was low ({coherence:.2f}).")
+        
+        context = "\n".join(line for line in context_lines if line)
+        
+        prompt = f"""You are writing wellness highlights for a family dashboard about their elderly loved one's daily check-in call.
+
+CALL DATA:
+{context}
+
+Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
+- Each point should be 1-2 sentences, warm and personal
+- First point: What they talked about (topics, stories, plans)
+- Second point: How they seemed emotionally (mood, energy)
+- Third point: Engagement level or medication update if relevant
+- Additional points: Any concerns (safety, memory, coherence) or family requests
+- Write for worried family members, not doctors — warm, clear, reassuring when possible
+- Do NOT use clinical language, do NOT mention "AI", "Clara", "companion", or "agent"
+- Do NOT use markdown, bullet markers, or numbering — just plain sentences
+- Each highlight should be a standalone sentence or two"""
+        
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel("gemini-3-flash-preview")
+            response = model.generate_content(prompt)
+            raw = response.text.strip()
+            
+            # Parse response into individual highlights
+            highlights = []
+            for line in raw.split("\n"):
+                line = line.strip().lstrip("-•*·").strip()
+                # Remove numbering like "1." or "1)"
+                import re
+                line = re.sub(r"^\d+[.)]\s*", "", line).strip()
+                if line and len(line) > 10:
+                    highlights.append(line)
+            
+            if highlights:
+                logger.info(f"[GEMINI] Generated {len(highlights)} wellness highlights")
+                return highlights[:5]
+        except Exception as exc:
+            logger.warning(f"[GEMINI] Highlights generation failed: {exc}")
+        
+        return []
+    
+    def _rule_based_highlights(self, summary: str, analysis: Optional[dict] = None, metrics: Optional[dict] = None) -> list[str]:
         """
         Extract key highlights from conversation summary and analysis data.
         All text must be plain English, suitable for a non-medical family member.

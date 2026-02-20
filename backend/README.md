@@ -6,10 +6,12 @@ AI voice companion for elderly care — phone-based daily check-ins with Clara, 
 
 ClaraCare provides a complete cognitive health monitoring system:
 - **Voice Agent** — Natural phone conversations with Clara via Deepgram Voice Agent API
+- **Gemini LLM Intelligence** — Context-aware call summaries, wellness highlights, and PDF executive summaries via `gemini-3-flash-preview`
 - **Cognitive Analysis Engine** — NLP-based metrics, baseline tracking, alerts, and wellness digests
+- **Deepgram Text Intelligence** — Sentiment analysis, topic detection, and intent recognition
 - **Nostalgia Engine** — You.com-powered era-specific content for patient engagement
 - **Data Layer** — Sanity CMS for persistent patient data and conversation storage
-- **Reports** — Foxit Document Generation for cognitive health PDFs
+- **Reports** — Foxit Document Generation for cognitive health PDFs with Gemini executive summaries
 - **Notifications** — Automated email alerts to family members
 
 ## Quick Start
@@ -45,10 +47,32 @@ Server runs at `http://localhost:8000` with API docs at `/docs`.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    A["Patient Phone"] --> B["Twilio"]
+    B --> C["Clara (Deepgram Voice Agent)"]
+    C --> D["Post-Call Analysis"]
+    D --> E["Cognitive Pipeline"]
+    D --> F["Gemini LLM"]
+    E --> G["Data Store + Notifications"]
+    F -->|"Summaries, Highlights, Reports"| G
 ```
-Patient Phone → Twilio → Clara (Deepgram Voice Agent) → Cognitive Pipeline → Alerts & Digests
-                                    ↓
-                            Data Store + Notifications
+
+### Post-Call Analysis Flow
+
+```mermaid
+flowchart TD
+    A["Call Ends \u2192 Transcript Saved"] --> B["Gemini LLM (gemini-3-flash-preview)"]
+    B -->|"Warm, context-aware summary"| M["Merge Analysis"]
+    A --> C["Deepgram Text Intelligence"]
+    C -->|"Sentiment, topics, intents"| M
+    A --> D["Elder-Care Keyword Analysis"]
+    D -->|"Safety flags, medications, loneliness"| M
+    M --> E["Unified Analysis Result"]
+
+    style B fill:#e8f5e9,stroke:#388e3c
+    style C fill:#e3f2fd,stroke:#1976d2
+    style D fill:#fff3e0,stroke:#f57c00
 ```
 
 ### Voice Agent
@@ -56,41 +80,35 @@ Natural phone conversations powered by Deepgram's Voice Agent API with Twilio fo
 
 ### Cognitive Analysis Pipeline
 
+```mermaid
+flowchart TD
+    A["Voice Conversation"] --> B["1. Cognitive Analyzer"]
+    B -->|"5 NLP Metrics"| C["2. Baseline Tracker"]
+    C -->|"Compare to Baseline"| D["3. Alert Engine"]
+    D -->|"Generate Alerts"| E["4. Wellness Digest Generator"]
+    E -->|"Daily Summary"| F["Data Store + Notifications"]
+
+    B --- B1["Vocabulary Diversity (TTR)"]
+    B --- B2["Topic Coherence"]
+    B --- B3["Repetition Detection"]
+    B --- B4["Word-Finding Pauses"]
+    B --- B5["Response Latency"]
+
+    style B fill:#ede7f6,stroke:#5e35b1
+    style C fill:#e8f5e9,stroke:#388e3c
+    style D fill:#fce4ec,stroke:#c62828
+    style E fill:#e3f2fd,stroke:#1976d2
 ```
-Voice Conversation
-        ↓
-┌─────────────────────────────────────┐
-│ 1. Cognitive Analyzer               │ → 5 NLP metrics
-│    - Vocabulary Diversity (TTR)     │
-│    - Topic Coherence (embeddings)   │
-│    - Repetition Detection           │
-│    - Word-Finding Pauses            │
-│    - Response Latency               │
-└─────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────┐
-│ 2. Baseline Tracker                 │ → Compare to baseline
-│    - Establish baseline (7 convos)  │
-│    - Detect deviations (>20%)       │
-│    - Track consecutive flags        │
-└─────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────┐
-│ 3. Alert Engine                     │ → Generate alerts
-│    - Cognitive decline alerts       │
-│    - Severity categorization        │
-│    - Family notifications           │
-└─────────────────────────────────────┘
-        ↓
-┌─────────────────────────────────────┐
-│ 4. Wellness Digest Generator        │ → Daily summary
-│    - Cognitive score (0-100)        │
-│    - Trend detection                │
-│    - Recommendations                │
-└─────────────────────────────────────┘
-        ↓
-    Data Store + Notifications
-```
+
+### Gemini LLM Integration
+
+Gemini (`gemini-3-flash-preview`) is used across the pipeline for:
+
+| Component | Usage |
+|-----------|-------|
+| **Post-Call Summary** | Generates warm, family-friendly summaries with patient context |
+| **Wellness Highlights** | Creates detailed KEY HIGHLIGHTS for dashboard and email |
+| **PDF Executive Summary** | Writes narrative cognitive health overview for downloadable reports |
 
 ## File Structure
 
@@ -108,9 +126,10 @@ backend/
 │   ├── cognitive/                   # Cognitive Analysis
 │   │   ├── models.py                # Pydantic models
 │   │   ├── analyzer.py              # 5 NLP metrics engine
+│   │   ├── post_call_analyzer.py    # Gemini + Deepgram + elder-care analysis
 │   │   ├── baseline.py              # Baseline tracking and deviation detection
 │   │   ├── alerts.py                # Alert generation
-│   │   ├── pipeline.py              # Orchestrator (chains all analysis steps)
+│   │   ├── pipeline.py              # Orchestrator (chains all analysis steps + Gemini highlights)
 │   │   └── utils.py                 # Shared utilities
 │   │
 │   ├── nostalgia/                   # You.com nostalgia engine
@@ -123,7 +142,7 @@ backend/
 │   │
 │   ├── reports/                     # Report generation
 │   │   ├── foxit_client.py          # Foxit Document Generation API
-│   │   └── generator.py             # Report builder
+│   │   └── generator.py             # Report builder + Gemini executive summary
 │   │
 │   ├── notifications/               # Email system
 │   │   ├── email.py                 # Async SMTP + Jinja2 templates
@@ -202,5 +221,6 @@ The backend is deployed on Akamai LKE with Cloudflare TLS termination.
 2. **Lazy model loading** — NLP models loaded on first use to avoid slow startup
 3. **Async-first** — All I/O operations are async for performance
 4. **Composable pipeline** — Each stage (analyze → baseline → alert → digest) is independent and testable
-5. **Graceful degradation** — System works even if NLP models fail (returns defaults)
+5. **Graceful degradation** — System works even if Gemini/NLP models fail (returns rule-based fallbacks)
 6. **Email client compatibility** — Table-based layouts with gradient fallbacks
+7. **Gemini-first summarization** — Warm, family-friendly summaries via `gemini-3-flash-preview` with full patient context, replacing Deepgram's generic output
