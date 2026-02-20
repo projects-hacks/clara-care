@@ -1,147 +1,157 @@
 {% extends "_base.html" %}
 
-{% block title %}Daily Wellness Digest{% endblock %}
+{% block title %}How {{ patient_name }} is doing — {{ date_formatted }}{% endblock %}
 
 {% block styles %}
 .header {
-    background-color: #667eea; /* Fallback for Outlook */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 30px;
-    text-align: center;
+background-color: #667eea; /* Fallback for Outlook */
+background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+color: white;
+padding: 30px 24px;
+text-align: center;
 }
 .header h1 {
-    margin: 0 0 8px 0;
-    font-size: 28px;
-    font-weight: 600;
+margin: 0 0 6px 0;
+font-size: 22px;
+font-weight: 600;
 }
 .header .date {
-    font-size: 14px;
-    opacity: 0.9;
+font-size: 13px;
+opacity: 0.85;
 }
 .mood-section {
-    text-align: center;
-    padding: 20px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    margin-bottom: 24px;
+text-align: center;
+padding: 20px;
+background-color: #f8f9fa;
+border-radius: 10px;
+margin-bottom: 24px;
 }
 .mood-emoji {
-    font-size: 48px;
-    margin-bottom: 8px;
+font-size: 44px;
+margin-bottom: 6px;
 }
 .mood-label {
-    font-size: 18px;
-    font-weight: 600;
-    color: #555;
+font-size: 17px;
+font-weight: 600;
+color: #444;
 }
-.score-section-table {
-    width: 100%;
-    margin: 24px 0;
-    background-color: #f8f9fa;
-    border-radius: 8px;
+.mood-sublabel {
+font-size: 13px;
+color: #888;
+margin-top: 4px;
 }
-.score-section-table td {
-    text-align: center;
-    padding: 20px;
-    width: 50%;
+.score-row {
+width: 100%;
+margin: 20px 0;
+border-collapse: collapse;
 }
-.score-value {
-    font-size: 36px;
-    font-weight: 700;
-    color: #667eea;
-    margin-bottom: 4px;
+.score-row td {
+text-align: center;
+padding: 18px 12px;
+width: 50%;
+vertical-align: top;
 }
-.score-label {
-    font-size: 13px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.score-row td:first-child {
+border-right: 1px solid #e8e8e8;
 }
-.score-context {
-    font-size: 14px;
-    font-weight: 600;
-    margin-top: 4px;
+.score-main {
+font-size: 15px;
+font-weight: 700;
+margin-bottom: 4px;
 }
 .score-good { color: #28a745; }
-.score-fair { color: #ffc107; }
+.score-fair { color: #e88c0a; }
 .score-needs-attention { color: #dc3545; }
-.section {
-    margin: 24px 0;
+.score-sub {
+font-size: 12px;
+color: #888;
 }
-.section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #e0e0e0;
-}
-.highlights-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.highlights-table td {
-    padding: 12px 0;
-    border-bottom: 1px solid #f0f0f0;
-}
-.highlights-table tr:last-child td {
-    border-bottom: none;
-}
-.bullet-cell {
-    width: 28px;
-    color: #667eea;
-    font-weight: bold;
-    font-size: 20px;
-    vertical-align: top;
-}
-.highlight-text {
-    color: #333;
-    line-height: 1.6;
-}
-.recommendations {
-    background-color: #fff9e6;
-    border-left: 4px solid #ffc107;
-    padding: 16px;
-    border-radius: 4px;
-}
-.recommendations ul {
-    margin: 8px 0 0 0;
-    padding-left: 20px;
-}
-.recommendations li {
-    margin: 8px 0;
-}
-.trend-badge {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
+.trend-pill {
+display: inline-block;
+padding: 4px 14px;
+border-radius: 14px;
+font-size: 12px;
+font-weight: 600;
 }
 .trend-improving {
-    background-color: #d4edda;
-    color: #155724;
+background-color: #d4edda;
+color: #155724;
 }
 .trend-stable {
-    background-color: #d1ecf1;
-    color: #0c5460;
+background-color: #e2e8f0;
+color: #4a5568;
 }
 .trend-declining {
-    background-color: #f8d7da;
-    color: #721c24;
+background-color: #f8d7da;
+color: #721c24;
+}
+.section {
+margin: 24px 0;
+}
+.section-title {
+font-size: 15px;
+font-weight: 700;
+color: #333;
+margin-bottom: 14px;
+padding-bottom: 8px;
+border-bottom: 2px solid #edf2f7;
+}
+.highlights-table {
+width: 100%;
+border-collapse: collapse;
+}
+.highlights-table td {
+padding: 10px 0;
+border-bottom: 1px solid #f5f5f5;
+font-size: 15px;
+line-height: 1.7;
+color: #444;
+}
+.highlights-table tr:last-child td {
+border-bottom: none;
+}
+.bullet-cell {
+width: 24px;
+color: #667eea;
+font-weight: bold;
+font-size: 18px;
+vertical-align: top;
+padding-top: 12px;
+}
+.action-box {
+background-color: #fffbeb;
+border-left: 4px solid #f59e0b;
+padding: 18px 20px;
+border-radius: 0 8px 8px 0;
+margin-top: 8px;
+}
+.action-box h3 {
+margin: 0 0 10px 0;
+font-size: 14px;
+font-weight: 700;
+color: #92400e;
+}
+.action-box ul {
+margin: 0;
+padding-left: 18px;
+}
+.action-box li {
+margin: 8px 0;
+font-size: 14px;
+line-height: 1.6;
+color: #78350f;
 }
 .empty-state {
-    text-align: center;
-    padding: 20px;
-    color: #999;
-    font-style: italic;
+text-align: center;
+padding: 20px;
+color: #999;
+font-style: italic;
 }
 {% endblock %}
 
 {% block content %}
 <div class="header">
-    <h1>📊 Daily Wellness Digest</h1>
+    <h1>{{ mood_emoji }} How {{ patient_name.split(' ')[0] if ' ' in patient_name else patient_name }} is doing</h1>
     <div class="date">{{ date_formatted }}</div>
 </div>
 
@@ -149,50 +159,54 @@
     {% if recipient_name %}
     <div class="greeting">Hi {{ recipient_name }},</div>
     {% endif %}
-    
+
+    {# ── Mood ── #}
     <div class="mood-section">
         <div class="mood-emoji">{{ mood_emoji }}</div>
-        <div class="mood-label">Overall Mood: {{ digest.overall_mood.title() }}</div>
+        <div class="mood-label">{{ mood_description }}</div>
+        <div class="mood-sublabel">Based on today's conversation with Clara</div>
     </div>
-    
-    <table class="score-section-table" cellpadding="0" cellspacing="0">
+
+    {# ── Score + Trend ── #}
+    <table class="score-row" cellpadding="0" cellspacing="0">
         <tr>
             <td>
-                <div class="score-value">{{ digest.cognitive_score }}</div>
-                <div class="score-label">Cognitive Score</div>
-                <div class="score-context {{ score_context_class }}">{{ score_context_label }}</div>
+                <div class="score-main {{ score_context_class }}">{{ score_context_label }}</div>
+                <div class="score-sub">Cognitive wellness</div>
             </td>
             <td>
-                <div class="score-value">{{ trend_icon }}</div>
-                <div class="score-label">
-                    <span class="trend-badge trend-{{ digest.cognitive_trend }}">
-                        {{ digest.cognitive_trend.title() }}
+                <div>
+                    <span class="trend-pill trend-{{ digest.cognitive_trend }}">
+                        {{ trend_icon }} {{ trend_description }}
                     </span>
                 </div>
+                <div class="score-sub" style="margin-top: 6px;">Compared to recent days</div>
             </td>
         </tr>
     </table>
-    
+
+    {# ── Highlights ── #}
     <div class="section">
-        <div class="section-title">Conversation Highlights</div>
+        <div class="section-title">How her day went</div>
         {% if digest.highlights and digest.highlights|length > 0 %}
         <table class="highlights-table" cellpadding="0" cellspacing="0">
             {% for highlight in digest.highlights %}
             <tr>
                 <td class="bullet-cell">•</td>
-                <td class="highlight-text">{{ highlight }}</td>
+                <td>{{ highlight }}</td>
             </tr>
             {% endfor %}
         </table>
         {% else %}
-        <div class="empty-state">No conversation recorded today.</div>
+        <div class="empty-state">No conversation was recorded today.</div>
         {% endif %}
     </div>
-    
+
+    {# ── Recommendations ── #}
     {% if digest.recommendations and digest.recommendations|length > 0 %}
     <div class="section">
-        <div class="recommendations">
-            <strong>💡 Recommendations:</strong>
+        <div class="action-box">
+            <h3>💡 What you can do</h3>
             <ul>
                 {% for rec in digest.recommendations %}
                 <li>{{ rec }}</li>
@@ -205,5 +219,7 @@
 {% endblock %}
 
 {% block footer_message %}
-<p>This digest was automatically generated for {{ patient_name }} from today's conversation with Clara.</p>
+<p>This daily summary was generated for {{ patient_name }} from today's conversation with Clara.</p>
+<p style="font-size: 12px; margin-top: 6px; color: #aaa;">ClaraCare keeps you informed so you can stay close, even from
+    far away.</p>
 {% endblock %}

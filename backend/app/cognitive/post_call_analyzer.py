@@ -113,7 +113,7 @@ async def _deepgram_analyze(transcript: str) -> dict:
             response = await client.post(
                 "https://api.deepgram.com/v1/read",
                 params={
-                    "summarize": "v2",
+                    "summarize": "true",
                     "sentiment": "true",
                     "topics": "true",
                     "intents": "true",
@@ -130,37 +130,53 @@ async def _deepgram_analyze(transcript: str) -> dict:
             
             results = data.get("results", {})
             
-            # Extract summary and clean up persona references
+            # Log raw response at DEBUG level so we can inspect what
+            # topics/intents Deepgram actually returns and refine our maps.
+            logger.debug(
+                "[DEEPGRAM_RAW] %s",
+                json.dumps(results, indent=2, default=str)[:4000]
+            )
+            
+            # ── Extract summary ─────────────────────────────────────────
+            # Deepgram's summarization may use generic nouns ("the customer",
+            # "the caller").  We do *minimal* cleanup here — just the 3 most
+            # common persona references — because the exact wording isn't
+            # guaranteed by the API and heavy regex risks silent breakage.
             summary_info = results.get("summary") or {}
             summary = summary_info.get("text", "")
             
-            # Post-process: strip out any persona references that crept in
-            for generic in [
-                "a customer", "A customer", "the customer", "The customer",
-                "a caller", "A caller", "the caller", "The caller",
-                "Clara (an AI companion)", "an AI companion", "Clara",
-                "the AI", "an AI",
+            for generic, replacement in [
+                ("the customer", "she"),
+                ("the caller", "she"),
+                ("Clara", "the companion"),
             ]:
-                summary = summary.replace(generic, "she").replace("  ", " ").strip()
-            summary = summary.replace("She and she", "She")
+                summary = re.sub(
+                    re.escape(generic), replacement, summary, flags=re.IGNORECASE
+                )
+            summary = re.sub(r"\s{2,}", " ", summary).strip()
             
-            # Extract topics
+            # ── Extract topics ──────────────────────────────────────────
+            # Trust Deepgram's semantic topic extraction — the model already
+            # understands context.  Our elder-care keywords (safety, meds,
+            # loneliness) are layered on top in _merge_analysis.
             topics_data = results.get("topics", {}).get("segments", [])
-            topics = []
+            topics: list[str] = []
             for seg in topics_data:
                 for topic in seg.get("topics", []):
                     t = topic.get("topic", "")
                     if t and t not in topics:
                         topics.append(t)
             
-            # Extract sentiment
+            # ── Extract sentiment ───────────────────────────────────────
             sentiments_data = results.get("sentiments", {}).get("average", {})
             sentiment = sentiments_data.get("sentiment", "neutral")
             sentiment_score = sentiments_data.get("sentiment_score", 0)
             
-            # Extract intents
+            # ── Extract intents ─────────────────────────────────────────
+            # Pass Deepgram intents through directly — the model already
+            # classifies user intent semantically.
             intents_data = results.get("intents", {}).get("segments", [])
-            intents = []
+            intents: list[str] = []
             for seg in intents_data:
                 for intent in seg.get("intents", []):
                     i = intent.get("intent", "")
@@ -169,8 +185,8 @@ async def _deepgram_analyze(transcript: str) -> dict:
             
             logger.info(
                 f"[DEEPGRAM_INTEL] summary_len={len(summary)}, "
-                f"topics={len(topics)}, sentiment={sentiment}({sentiment_score:.2f}), "
-                f"intents={len(intents)}"
+                f"topics={topics}, sentiment={sentiment}({sentiment_score:.2f}), "
+                f"intents={intents}"
             )
             
             return {
@@ -278,15 +294,24 @@ def _merge_analysis(dg: dict, care: dict, transcript: str) -> dict:
         mood_map_label = {"positive": "upbeat and positive", "negative": "low or subdued", "neutral": "calm and neutral"}
         mood_explanation = f"Her overall tone during the call felt {mood_map_label.get(dg_sentiment, 'neutral')}."
     
-    # Topics: merge Deepgram topics with our detected signals
-    topics = dg.get("topics", [])
-    if loneliness and "loneliness" not in [t.lower() for t in topics]:
+    # Topics: trust Deepgram's semantic topics, then layer in our
+    # keyword-detected elder-care signals that Deepgram can't catch
+    topics = list(dg.get("topics", []))  # copy
+    topics_lower = [t.lower() for t in topics]
+    if loneliness and "loneliness" not in topics_lower:
         topics.append("loneliness")
-    if care.get("desire_to_connect") and "family" not in [t.lower() for t in topics]:
+    if care.get("desire_to_connect") and "family" not in topics_lower:
         topics.append("family connection")
     if care.get("medication_status", {}).get("discussed"):
-        if "medication" not in [t.lower() for t in topics]:
+        if "medication" not in topics_lower:
             topics.append("medication")
+    
+    # Action items: keyword-based elder-care items + Deepgram intents
+    action_items = list(care.get("action_items", []))
+    for intent in dg.get("intents", []):
+        item = f"She expressed a {intent.lower()} during the conversation"
+        if item not in action_items:
+            action_items.append(item)
     
     # Engagement level from transcript length
     patient_text = _extract_patient_text(transcript)
@@ -303,13 +328,13 @@ def _merge_analysis(dg: dict, care: dict, transcript: str) -> dict:
         "mood": mood,
         "mood_explanation": mood_explanation,
         "topics": topics,
-        "action_items": care.get("action_items", []),
+        "action_items": action_items,
         "medication_status": care.get("medication_status", {"discussed": False, "medications_mentioned": [], "notes": ""}),
         "safety_flags": safety_flags,
         "engagement_level": engagement,
         "loneliness_indicators": loneliness,
         "wants_to_talk_about": topics[:5],
-        "notable_requests": care.get("action_items", []),
+        "notable_requests": action_items,
         "desire_to_connect": care.get("desire_to_connect", False),
         "connection_context": care.get("connection_context", ""),
     }

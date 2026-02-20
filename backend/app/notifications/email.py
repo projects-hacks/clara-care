@@ -92,9 +92,12 @@ class EmailNotifier:
             # Render email from template
             template = self.template_env.get_template("alert_email.html")
             
-            # Human-friendly subject line
-            severity_label = alert.get("severity", "medium").upper()
-            subject = f"[{severity_label}] ClaraCare: {alert_type_friendly} noticed for {patient_name}"
+            # Warm, descriptive subject line
+            first_name = patient_name.split()[0] if patient_name else "your loved one"
+            subject = f"ClaraCare: {alert_type_friendly} — {first_name}"
+            
+            # Icon for severity
+            alert_icon = self._get_alert_icon(alert.get("alert_type", ""))
             
             # Send to each contact
             for contact in family_contacts:
@@ -107,6 +110,7 @@ class EmailNotifier:
                     patient_name=patient_name,
                     recipient_name=contact.get("name"),
                     alert_type_friendly=alert_type_friendly,
+                    alert_icon=alert_icon,
                     timestamp_formatted=timestamp_formatted,
                     severity_color=self._get_severity_color(alert.get("severity", "medium")),
                     dashboard_url=self.dashboard_url,
@@ -154,10 +158,15 @@ class EmailNotifier:
             # Get score context
             score_context_label, score_context_class = self._get_score_context(digest.get("cognitive_score", 0))
             
+            # Human-readable mood and trend descriptions
+            mood_description = self._get_mood_description(digest.get("overall_mood", "neutral"))
+            trend_description = self._get_trend_description(digest.get("cognitive_trend", "stable"))
+            
             # Render email from template
             template = self.template_env.get_template("daily_digest.html")
             
-            subject = f"ClaraCare Daily Digest for {patient_name} - {date_formatted}"
+            first_name = patient_name.split()[0] if patient_name else "your loved one"
+            subject = f"How {first_name} is doing today — {date_formatted}"
             
             # Send to contacts who want daily digests
             for contact in family_contacts:
@@ -174,7 +183,9 @@ class EmailNotifier:
                     recipient_name=contact.get("name"),
                     date_formatted=date_formatted,
                     mood_emoji=self._get_mood_emoji(digest.get("overall_mood", "neutral")),
+                    mood_description=mood_description,
                     trend_icon=self._get_trend_icon(digest.get("cognitive_trend", "stable")),
+                    trend_description=trend_description,
                     score_context_label=score_context_label,
                     score_context_class=score_context_class,
                     dashboard_url=self.dashboard_url,
@@ -278,17 +289,61 @@ class EmailNotifier:
     def _get_friendly_alert_type(self, alert_type: str) -> str:
         """Convert technical alert type to family-friendly message"""
         friendly_names = {
-            "vocabulary_shrinkage": "Changes in speech patterns",
-            "repetitive_speech": "Repetitive conversation patterns",
-            "word_finding_difficulty": "Difficulty finding words",
-            "cognitive_decline": "Memory inconsistency detected",
-            "coherence_drop": "Conversation clarity concern",
-            "coherence_issues": "Changes in conversation clarity",
-            "baseline_deviation": "Unusual patterns detected",
-            "distress": "Signs of distress detected",
-            "social_connection": "Social Connection Opportunity"
+            "vocabulary_shrinkage": "She used fewer words than usual",
+            "repetition_increase": "She repeated some stories or phrases",
+            "word_finding_difficulty": "She struggled to find the right words",
+            "cognitive_decline": "A change in her conversation pattern",
+            "coherence_drop": "Her conversation was harder to follow",
+            "coherence_issues": "Her conversation was harder to follow",
+            "baseline_deviation": "Something felt different today",
+            "distress": "She seemed distressed",
+            "response_delay": "She was slower to respond",
+            "response_latency": "She was slower to respond",
+            "confusion_detected": "Signs of confusion noticed",
+            "emergency": "Urgent: Emergency alert",
+            "fall": "Urgent: Possible fall detected",
+            "social_connection": "She's missing you"
         }
         return friendly_names.get(alert_type, alert_type.replace('_', ' ').title())
+    
+    def _get_alert_icon(self, alert_type: str) -> str:
+        """Map alert type to emoji icon for email header"""
+        icons = {
+            "vocabulary_shrinkage": "📉",
+            "repetition_increase": "🔁",
+            "word_finding_difficulty": "💬",
+            "cognitive_decline": "🧠",
+            "coherence_drop": "🧩",
+            "distress": "😰",
+            "response_delay": "⏱️",
+            "response_latency": "⏱️",
+            "confusion_detected": "❓",
+            "emergency": "🚨",
+            "fall": "⚠️",
+            "social_connection": "💕"
+        }
+        return icons.get(alert_type, "🔔")
+    
+    def _get_mood_description(self, mood: str) -> str:
+        """Plain-English mood description for email"""
+        descriptions = {
+            "happy": "She seemed happy and in good spirits today",
+            "neutral": "She had a calm, steady conversation today",
+            "sad": "She seemed a little down or subdued today",
+            "confused": "She seemed a bit confused during the conversation",
+            "distressed": "She appeared distressed or upset today",
+            "nostalgic": "She was feeling nostalgic and reflective today"
+        }
+        return descriptions.get(mood, "She had a conversation today")
+    
+    def _get_trend_description(self, trend: str) -> str:
+        """Plain-English trend description for email"""
+        descriptions = {
+            "improving": "Looking up",
+            "stable": "Holding steady",
+            "declining": "Worth watching"
+        }
+        return descriptions.get(trend, "Steady")
     
     def _get_score_context(self, score: int) -> tuple[str, str]:
         """

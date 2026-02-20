@@ -18,6 +18,10 @@ import {
     Clock,
     Users,
     Star,
+    TrendingUp,
+    MessageCircle,
+    Eye,
+    Mic,
 } from 'lucide-react'
 
 /* ──────────────────────────────────────────────
@@ -125,8 +129,8 @@ export default function LandingPage() {
             {/* ── Sticky Nav ─────────────────────────── */}
             <header
                 className={`fixed top-0 z-50 w-full transition-all duration-300 ${scrolled
-                        ? 'bg-white/80 shadow-sm backdrop-blur-xl'
-                        : 'bg-transparent'
+                    ? 'bg-white/80 shadow-sm backdrop-blur-xl'
+                    : 'bg-transparent'
                     }`}
             >
                 <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -169,7 +173,7 @@ export default function LandingPage() {
                 <div className="relative mx-auto max-w-5xl px-6 text-center">
                     <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-sm font-medium text-white/90 backdrop-blur-sm">
                         <Sparkles className="h-4 w-4 text-amber-300" />
-                        AI-Powered Elder Care Companion
+                        Powered by Deepgram Text Intelligence
                     </div>
 
                     <h1 className="mx-auto max-w-4xl text-4xl font-extrabold leading-tight tracking-tight text-white md:text-6xl md:leading-[1.1]">
@@ -182,7 +186,7 @@ export default function LandingPage() {
 
                     <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-blue-100/80 md:text-xl">
                         Clara calls your loved ones every day, has warm conversations,
-                        monitors cognitive health with clinical-grade NLP, and sends you
+                        analyzes mood and cognition with Deepgram&apos;s NLP, and sends you
                         a real-time wellness dashboard — so you&apos;re never out of the loop.
                     </p>
 
@@ -223,7 +227,7 @@ export default function LandingPage() {
                                 {[
                                     { label: 'Cognitive Score', value: '75/100', color: 'from-blue-500 to-indigo-500' },
                                     { label: 'Conversations', value: '12', color: 'from-violet-500 to-purple-500' },
-                                    { label: 'Active Alerts', value: '2', color: 'from-amber-500 to-orange-500' },
+                                    { label: 'Mood Today', value: '😊 Happy', color: 'from-emerald-500 to-teal-500' },
                                 ].map((stat) => (
                                     <div key={stat.label} className="rounded-xl bg-gray-50 p-4">
                                         <p className="text-xs font-medium text-gray-500">{stat.label}</p>
@@ -244,8 +248,8 @@ export default function LandingPage() {
                     {(
                         [
                             { end: 5, suffix: '', label: 'Cognitive Metrics Tracked', icon: Brain },
-                            { end: 24, suffix: '/7', label: 'Always Available', icon: Clock },
-                            { end: 100, suffix: '%', label: 'NLP Accuracy', icon: Activity },
+                            { end: 24, suffix: '/7', label: 'Always Monitoring', icon: Clock },
+                            { end: 4, suffix: '', label: 'NLP Features per Call', icon: Mic },
                             { end: 30, suffix: 's', label: 'Alert Response Time', icon: Bell },
                         ] as const
                     ).map((stat, i) => (
@@ -275,47 +279,68 @@ export default function LandingPage() {
                             {
                                 icon: Phone,
                                 title: 'AI Voice Calls',
-                                desc: 'Clara calls daily with warm, personalized conversations — adapting tone and topics to each patient.',
+                                desc: 'Clara calls daily with warm, personalized conversations — adapting tone and topics to each person\'s life story and preferences.',
                                 gradient: 'from-blue-500 to-indigo-500',
                                 shadow: 'shadow-blue-500/20',
                             },
                             {
                                 icon: Brain,
-                                title: 'Cognitive Tracking',
-                                desc: '5 NLP metrics — vocabulary diversity, topic coherence, repetition, word-finding pauses, response latency.',
+                                title: 'Deepgram Text Intelligence',
+                                desc: 'Every conversation is analyzed with Deepgram\'s summarization, sentiment analysis, topic detection, and intent recognition — all in one API call.',
                                 gradient: 'from-violet-500 to-purple-500',
                                 shadow: 'shadow-violet-500/20',
                             },
                             {
+                                icon: TrendingUp,
+                                title: 'Cognitive Trends',
+                                desc: 'Track 5 NLP metrics over time — vocabulary diversity, topic coherence, repetition, word-finding pauses, and response latency — with interactive charts.',
+                                gradient: 'from-emerald-500 to-teal-500',
+                                shadow: 'shadow-emerald-500/20',
+                            },
+                            {
                                 icon: Bell,
-                                title: 'Smart Alerts',
-                                desc: 'Instant alerts to family when cognitive scores deviate from baseline — low, medium, or high severity.',
+                                title: 'Humanized Alerts',
+                                desc: 'Instant, plain-English alerts when cognitive scores deviate from baseline — with severity levels, suggested actions, and empathetic framing.',
                                 gradient: 'from-amber-500 to-orange-500',
                                 shadow: 'shadow-amber-500/20',
                             },
                             {
                                 icon: BookOpen,
                                 title: 'Nostalgia Therapy',
-                                desc: 'Clara weaves era-specific memories into conversations — music, events, culture — to boost engagement.',
+                                desc: 'Personalize Clara\'s conversations with era-specific memories — favorite music, life events, hobbies — to boost engagement and cognitive stimulation.',
                                 gradient: 'from-pink-500 to-rose-500',
                                 shadow: 'shadow-pink-500/20',
                             },
                             {
-                                icon: LayoutDashboard,
-                                title: 'Family Dashboard',
-                                desc: 'Real-time wellness view: cognitive trends, conversation history, mood tracking, and downloadable reports.',
-                                gradient: 'from-emerald-500 to-teal-500',
-                                shadow: 'shadow-emerald-500/20',
-                            },
-                            {
                                 icon: Mail,
-                                title: 'Daily Digests',
-                                desc: 'Automated email summaries with highlights, recommendations, and cognitive scores delivered every morning.',
+                                title: 'Daily Wellness Digests',
+                                desc: 'Every morning, families receive a warm email: how she\'s doing, mood summary, conversation highlights, cognitive trends, and actionable tips.',
                                 gradient: 'from-sky-500 to-cyan-500',
                                 shadow: 'shadow-sky-500/20',
                             },
+                            {
+                                icon: Eye,
+                                title: 'Memory Monitoring',
+                                desc: 'Detects memory inconsistency patterns — when answers shift from "yes" to "not sure" to "I forgot" within the same conversation.',
+                                gradient: 'from-red-500 to-rose-500',
+                                shadow: 'shadow-red-500/20',
+                            },
+                            {
+                                icon: MessageCircle,
+                                title: 'Conversation History',
+                                desc: 'Full searchable transcripts of every call — with mood tags, engagement scores, safety flags, and topic breakdowns for each session.',
+                                gradient: 'from-indigo-500 to-blue-500',
+                                shadow: 'shadow-indigo-500/20',
+                            },
+                            {
+                                icon: LayoutDashboard,
+                                title: 'Family Dashboard',
+                                desc: 'Real-time wellness view with cognitive scores, mood tracking, trend charts, downloadable PDF reports, and one-click alert acknowledgment.',
+                                gradient: 'from-teal-500 to-cyan-500',
+                                shadow: 'shadow-teal-500/20',
+                            },
                         ].map((feature, i) => (
-                            <FadeIn key={feature.title} delay={i * 100}>
+                            <FadeIn key={feature.title} delay={i * 80}>
                                 <div className="group relative rounded-2xl border border-gray-100 bg-white p-6 transition-all hover:-translate-y-1 hover:shadow-xl">
                                     <div
                                         className={`mb-4 inline-flex items-center justify-center rounded-xl bg-gradient-to-br ${feature.gradient} p-3 shadow-lg ${feature.shadow}`}
@@ -346,21 +371,21 @@ export default function LandingPage() {
                             {
                                 step: '01',
                                 title: 'Clara Calls',
-                                desc: 'Schedule daily check-ins. Clara calls your loved one with warm, engaging conversations tailored to their personality and preferences.',
+                                desc: 'Clara calls your loved one daily with warm, engaging conversations — drawing on nostalgia prompts, hobbies, and their personality to keep things natural.',
                                 icon: Phone,
                                 gradient: 'from-blue-600 to-indigo-600',
                             },
                             {
                                 step: '02',
-                                title: 'AI Analyzes',
-                                desc: 'Our NLP engine extracts 5 cognitive metrics from every conversation, comparing against a personalized baseline built over time.',
+                                title: 'Deepgram Analyzes',
+                                desc: 'The full transcript goes through Deepgram\'s Text Intelligence — extracting summary, sentiment, topics, and intents. Our elder-care layer detects safety flags, medication compliance, and loneliness signals.',
                                 icon: Brain,
                                 gradient: 'from-violet-600 to-purple-600',
                             },
                             {
                                 step: '03',
                                 title: 'Family Stays Informed',
-                                desc: 'View real-time cognitive trends, receive instant alerts for deviations, and get daily digest emails — all from one dashboard.',
+                                desc: 'View real-time cognitive trends, receive plain-English alerts with suggested actions, and get humanized daily digest emails — all from one dashboard.',
                                 icon: Users,
                                 gradient: 'from-emerald-600 to-teal-600',
                             },
@@ -383,8 +408,93 @@ export default function LandingPage() {
                 </div>
             </section>
 
+            {/* ── Deepgram Integration ─────────────────── */}
+            <section className="border-y border-gray-100 bg-white py-24">
+                <div className="mx-auto max-w-6xl px-6">
+                    <div className="grid items-center gap-12 md:grid-cols-2">
+                        <FadeIn>
+                            <p className="text-sm font-semibold uppercase tracking-wider text-violet-600">Under the Hood</p>
+                            <h2 className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl">
+                                One API call,
+                                <br />
+                                four intelligence layers
+                            </h2>
+                            <p className="mt-5 text-base leading-relaxed text-gray-600">
+                                Every conversation goes through Deepgram&apos;s Text Intelligence in a single
+                                <code className="mx-1 rounded bg-gray-100 px-2 py-0.5 text-sm font-mono text-violet-700">/v1/read</code>
+                                request — no separate calls, no multiple APIs. The model handles the semantic heavy lifting.
+                            </p>
+
+                            <div className="mt-8 space-y-3">
+                                {[
+                                    { label: 'Summarization', desc: 'Concise recap of what was said, written for family members' },
+                                    { label: 'Sentiment', desc: 'Overall mood detection — positive, negative, or neutral' },
+                                    { label: 'Topics', desc: 'Semantic topic extraction — the model understands context, no keyword matching needed' },
+                                    { label: 'Intents', desc: 'What the patient is expressing — requests, concerns, questions' },
+                                ].map(({ label, desc }) => (
+                                    <div key={label} className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100">
+                                            <Sparkles className="h-3.5 w-3.5 text-violet-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900">{label}</p>
+                                            <p className="text-xs text-gray-500">{desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </FadeIn>
+
+                        <FadeIn delay={200}>
+                            {/* Code-style visual */}
+                            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-900 shadow-xl">
+                                <div className="flex items-center gap-2 border-b border-gray-700/50 px-4 py-3">
+                                    <div className="h-3 w-3 rounded-full bg-red-500/80" />
+                                    <div className="h-3 w-3 rounded-full bg-yellow-500/80" />
+                                    <div className="h-3 w-3 rounded-full bg-green-500/80" />
+                                    <span className="ml-2 text-xs text-gray-500">post_call_analyzer.py</span>
+                                </div>
+                                <div className="p-5 font-mono text-sm leading-relaxed">
+                                    <p className="text-gray-500"># One Deepgram call → four intelligence features</p>
+                                    <p className="mt-2">
+                                        <span className="text-blue-400">response</span>
+                                        <span className="text-gray-400"> = </span>
+                                        <span className="text-yellow-400">await</span>
+                                        <span className="text-green-400"> client.post</span>
+                                        <span className="text-gray-400">(</span>
+                                    </p>
+                                    <p className="pl-4 text-cyan-300">&quot;/v1/read&quot;</p>
+                                    <p className="pl-4 text-gray-500"># summarize, sentiment, topics, intents</p>
+                                    <p className="text-gray-400">)</p>
+                                    <p className="mt-3 text-gray-500"># Deepgram handles the semantics,</p>
+                                    <p className="text-gray-500"># our layer adds elder-care context:</p>
+                                    <p className="mt-1">
+                                        <span className="text-purple-400">safety_flags</span>
+                                        <span className="text-gray-400"> = </span>
+                                        <span className="text-green-400">_scan_safety_keywords</span>
+                                        <span className="text-gray-400">(transcript)</span>
+                                    </p>
+                                    <p>
+                                        <span className="text-purple-400">medication</span>
+                                        <span className="text-gray-400">  = </span>
+                                        <span className="text-green-400">_extract_medication_status</span>
+                                        <span className="text-gray-400">(..)</span>
+                                    </p>
+                                    <p>
+                                        <span className="text-purple-400">memory</span>
+                                        <span className="text-gray-400">      = </span>
+                                        <span className="text-green-400">_detect_memory_inconsistency</span>
+                                        <span className="text-gray-400">(..)</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </FadeIn>
+                    </div>
+                </div>
+            </section>
+
             {/* ── For Families ───────────────────────── */}
-            <section id="for-families" className="bg-white py-24">
+            <section id="for-families" className="bg-gray-50 py-24">
                 <div className="mx-auto max-w-6xl px-6">
                     <div className="grid items-center gap-12 md:grid-cols-2">
                         <FadeIn>
@@ -402,10 +512,11 @@ export default function LandingPage() {
 
                             <div className="mt-8 space-y-4">
                                 {[
-                                    { icon: Shield, text: 'HIPAA-aware data handling and secure storage' },
+                                    { icon: Shield, text: 'Safety keyword detection for suicidal ideation, falls, and self-harm' },
                                     { icon: Heart, text: 'Warm, empathetic conversations — not robotic scripts' },
-                                    { icon: Star, text: 'Personalized to their life story, hobbies, and era' },
-                                    { icon: Activity, text: 'Clinical-grade NLP tracking 5 cognitive dimensions' },
+                                    { icon: Star, text: 'Nostalgia therapy personalized to their life story and era' },
+                                    { icon: Activity, text: '5 cognitive metrics tracked and trended over time' },
+                                    { icon: Mail, text: 'Humanized daily digests — mood labels, not raw numbers' },
                                 ].map(({ icon: Icon, text }) => (
                                     <div key={text} className="flex items-start gap-3">
                                         <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100">
@@ -429,8 +540,8 @@ export default function LandingPage() {
                                             <Bell className="h-4 w-4 text-amber-600" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-semibold text-amber-900">Cognitive Alert</p>
-                                            <p className="mt-0.5 text-xs text-amber-700">Vocabulary diversity dropped 15% below baseline</p>
+                                            <p className="text-sm font-semibold text-amber-900">She used fewer words than usual</p>
+                                            <p className="mt-0.5 text-xs text-amber-700">💡 Try asking about her garden — it usually gets her talking</p>
                                         </div>
                                     </div>
                                     {/* Mini conversation card */}
@@ -440,17 +551,17 @@ export default function LandingPage() {
                                             <p className="text-xs font-medium text-gray-500">Today&apos;s Call — 8 min</p>
                                         </div>
                                         <p className="mt-2 text-sm text-gray-700">
-                                            &ldquo;Dorothy talked about her grandchildren visiting last weekend.
-                                            Mood: happy. Engagement: high.&rdquo;
+                                            &ldquo;She talked about her grandchildren visiting last weekend
+                                            and mentioned missing her daughter. Mood: happy. Engagement: high.&rdquo;
                                         </p>
                                     </div>
-                                    {/* Mini score card */}
+                                    {/* Mini digest card */}
                                     <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white">
                                         <div>
-                                            <p className="text-xs font-medium text-blue-200">Cognitive Score</p>
-                                            <p className="text-2xl font-bold">75 / 100</p>
+                                            <p className="text-xs font-medium text-blue-200">How she&apos;s doing</p>
+                                            <p className="text-lg font-bold">She&apos;s doing well today ☀️</p>
                                         </div>
-                                        <div className="text-sm font-semibold text-emerald-300">↑ Stable</div>
+                                        <div className="text-sm font-semibold text-emerald-300">↑ Looking up</div>
                                     </div>
                                 </div>
                             </div>
@@ -495,7 +606,7 @@ export default function LandingPage() {
                             ClaraCare
                         </div>
                         <p className="text-sm text-gray-500">
-                            AI Elder Care Companion — Built with ❤️ for families everywhere.
+                            AI Elder Care Companion — Powered by Deepgram Text Intelligence
                         </p>
                         <div className="flex gap-6 text-sm text-gray-500">
                             <Link href="/dashboard" className="transition-colors hover:text-gray-900">Dashboard</Link>

@@ -63,9 +63,9 @@ export default function HistoryPage() {
             </button>
           ))}
         </div>
-        </div>
+      </div>
 
-        <main className="space-y-3 px-4 py-3">
+      <main className="space-y-3 px-4 py-3">
           {conversations.length > 0 && !loading && !error && (
             <section className="rounded-2xl bg-white p-3 shadow-sm" aria-label="History summary">
               <p className="text-xs text-gray-600">

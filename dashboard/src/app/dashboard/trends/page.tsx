@@ -23,35 +23,35 @@ const METRICS: {
   description: string
   helperText: string
 }[] = [
-  {
-    key: 'vocabulary_diversity',
-    baseline: 0.63,
-    higherIsBetter: true,
-    description: 'How wide a range of words she used in conversation.',
-    helperText: 'Higher is generally better here.',
-  },
-  {
-    key: 'topic_coherence',
-    baseline: 0.87,
-    higherIsBetter: true,
-    description: 'How smoothly the conversation flowed from topic to topic.',
-    helperText: 'Higher means the conversation is easier to follow.',
-  },
-  {
-    key: 'repetition_rate',
-    baseline: 0.05,
-    higherIsBetter: false,
-    description: 'How often stories or phrases were repeated.',
-    helperText: 'Lower is better for this metric.',
-  },
-  {
-    key: 'word_finding_pauses',
-    baseline: 1.5,
-    higherIsBetter: false,
-    description: 'How frequently she paused to search for words.',
-    helperText: 'Lower is better; more pauses can signal strain.',
-  },
-]
+    {
+      key: 'vocabulary_diversity',
+      baseline: 0.63,
+      higherIsBetter: true,
+      description: 'How wide a range of words she used in conversation.',
+      helperText: 'Higher is generally better here.',
+    },
+    {
+      key: 'topic_coherence',
+      baseline: 0.87,
+      higherIsBetter: true,
+      description: 'How smoothly the conversation flowed from topic to topic.',
+      helperText: 'Higher means the conversation is easier to follow.',
+    },
+    {
+      key: 'repetition_rate',
+      baseline: 0.05,
+      higherIsBetter: false,
+      description: 'How often stories or phrases were repeated.',
+      helperText: 'Lower is better for this metric.',
+    },
+    {
+      key: 'word_finding_pauses',
+      baseline: 1.5,
+      higherIsBetter: false,
+      description: 'How frequently she paused to search for words.',
+      helperText: 'Lower is better; more pauses can signal strain.',
+    },
+  ]
 
 export default function TrendsPage() {
   const [trends, setTrends] = useState<CognitiveTrend[]>([])
@@ -124,6 +124,8 @@ interface TrendMetricCardProps {
 }
 
 function TrendMetricCard({ metric, trends }: TrendMetricCardProps) {
+  const [expanded, setExpanded] = useState(false)
+
   const metricPoints = trends
     .map((t) => t[metric.key])
     .filter((v): v is number => v !== null && v !== undefined)
@@ -150,44 +152,58 @@ function TrendMetricCard({ metric, trends }: TrendMetricCardProps) {
       className="rounded-xl bg-white p-4 shadow-sm"
       aria-label={metricLabel(metric.key)}
     >
+      {/* Header — always visible */}
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-gray-900">
             {metricLabel(metric.key)}
           </h2>
-          <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
-            {metric.description}
-          </p>
         </div>
-        {latest !== null && (
-          <div className="shrink-0 text-right">
-            <p className="text-[11px] font-medium text-gray-400">Latest value</p>
-            <p className="text-sm font-semibold text-gray-900">
-              {latest.toFixed(2)}
-            </p>
-            {deltaPct !== null && (
-              <p
-                className={cn(
-                  'mt-0.5 text-[11px] font-medium',
-                  deltaPct === 0
-                    ? 'text-gray-500'
-                    : metric.higherIsBetter
-                    ? deltaPct > 0
-                      ? 'text-emerald-600'
-                      : 'text-red-500'
-                    : deltaPct < 0
-                      ? 'text-emerald-600'
-                      : 'text-red-500'
-                )}
-              >
-                {deltaPct > 0 ? '+' : ''}
-                {deltaPct.toFixed(1)}%
+        <div className="flex items-center gap-2">
+          {latest !== null && (
+            <div className="text-right">
+              <p className="text-sm font-semibold text-gray-900">
+                {latest.toFixed(2)}
               </p>
+              {deltaPct !== null && (
+                <p
+                  className={cn(
+                    'text-[11px] font-medium',
+                    deltaPct === 0
+                      ? 'text-gray-500'
+                      : metric.higherIsBetter
+                        ? deltaPct > 0
+                          ? 'text-emerald-600'
+                          : 'text-red-500'
+                        : deltaPct < 0
+                          ? 'text-emerald-600'
+                          : 'text-red-500'
+                  )}
+                >
+                  {deltaPct > 0 ? '+' : ''}
+                  {deltaPct.toFixed(1)}%
+                </p>
+              )}
+            </div>
+          )}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-full transition-colors',
+              expanded
+                ? 'bg-clara-100 text-clara-700'
+                : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
             )}
-          </div>
-        )}
+            type="button"
+            aria-label={expanded ? 'Hide details' : 'Show details'}
+            aria-expanded={expanded}
+          >
+            <span className="text-sm">{expanded ? '✕' : 'ℹ️'}</span>
+          </button>
+        </div>
       </div>
 
+      {/* Chart — always visible */}
       <CognitiveChart
         data={trends}
         metric={metric.key}
@@ -195,19 +211,28 @@ function TrendMetricCard({ metric, trends }: TrendMetricCardProps) {
         height={190}
       />
 
-      <div className="mt-3 space-y-1.5 text-[11px] text-gray-600">
-        <p>{metric.helperText}</p>
-        {latest !== null && (
-          <p>
-            <span className="font-medium text-gray-700">Latest vs. baseline: </span>
-            {latest.toFixed(2)}{' '}
-            <span className="text-gray-400">(baseline {baseline.toFixed(2)})</span>
-            {deltaLabel && <span className="ml-1 text-gray-700">• {deltaLabel}</span>}
-          </p>
+      {/* Drawer — tap to expand */}
+      <div
+        className={cn(
+          'overflow-hidden transition-all duration-300 ease-in-out',
+          expanded ? 'mt-3 max-h-60 opacity-100' : 'max-h-0 opacity-0'
         )}
-        <p className="text-[10px] text-gray-400">
-          Tip: Tap and hold anywhere on the line to see the exact value for that day.
-        </p>
+      >
+        <div className="space-y-2 border-t border-gray-100 pt-3 text-[11px] text-gray-600">
+          <p>{metric.description}</p>
+          <p className="font-medium text-gray-500">{metric.helperText}</p>
+          {latest !== null && (
+            <p>
+              <span className="font-medium text-gray-700">Latest vs. baseline: </span>
+              {latest.toFixed(2)}{' '}
+              <span className="text-gray-400">(baseline {baseline.toFixed(2)})</span>
+              {deltaLabel && <span className="ml-1 text-gray-700">• {deltaLabel}</span>}
+            </p>
+          )}
+          <p className="text-[10px] text-gray-400">
+            Tip: Tap and hold anywhere on the line to see the exact value for that day.
+          </p>
+        </div>
       </div>
     </section>
   )
