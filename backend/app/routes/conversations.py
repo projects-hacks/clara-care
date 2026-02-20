@@ -94,12 +94,25 @@ def _clean_summary(raw: str) -> str:
     text = raw.strip()
     
     # Transform Deepgram structural preambles into personalized summaries
-    # Step 1: Remove the generic opener entirely
+    # Step 1: Remove generic openers entirely
     text = re.sub(
         r"A (?:caller|customer) and (?:a |the )?host discuss(?:es)? a wellness phone call "
         r"with an elderly (?:adult|patient|woman|man)\.\s*",
         "", text, flags=re.I
     )
+    # "A caller named Summarizes a wellness phone call ..." — Deepgram treats verb as name
+    # Also handles: "A caller named <Name> summarizes..."
+    text = re.sub(
+        r"A (?:caller|customer) named \w+\s+(?:a |the )?(?:wellness )?(?:phone )?(?:call|check-in)[^.]+\.\s*",
+        "", text, flags=re.I
+    )
+    text = re.sub(
+        r"A (?:caller|customer) named \w+ (?:summarizes|describes|discusses|talks about)[^.]+\.\s*",
+        "", text, flags=re.I
+    )
+    # "A customer named Clara talks to <name> about..." — already in _SUMMARY_NOISE but reinforce
+    text = re.sub(r"A customer named Clara[^.]+\.\s*", "", text, flags=re.I)
+
     # Step 2: Transform "They discuss the importance of X" → "She talked about X"
     text = re.sub(
         r"They discuss(?:es)? the importance of ",
@@ -110,15 +123,25 @@ def _clean_summary(raw: str) -> str:
         r"They also (?:talk|talked) about the importance of ",
         "She also mentioned ", text, flags=re.I
     )
-    # Step 4: Transform remaining "They also talk/discuss about X" → "She also talked about X"
+    # Step 4: Transform remaining "They also talk/discuss/mention X" → "She also talked about X"
     text = re.sub(
-        r"They also (?:talk|talked|discuss(?:es)?) about ",
+        r"They also (?:talk|talked|discuss(?:es)?|mention(?:ed)?) (?:about )?",
         "She also talked about ", text, flags=re.I
     )
     # Step 5: Transform "They discuss X" → "She talked about X"
     text = re.sub(
         r"They discuss(?:es)? ",
         "She talked about ", text, flags=re.I
+    )
+
+    # Step 6: Replace impersonal labels with personalized references
+    text = re.sub(r"\bthe representative\b", "Clara", text, flags=re.I)
+    text = re.sub(r"\bthe host\b", "Clara", text, flags=re.I)
+
+    # Step 7: Strip filler closing sentences
+    text = re.sub(
+        r"The call (?:ends|ended) with (?:her|she) (?:thanking|saying)[^.]+\.\s*",
+        "", text, flags=re.I
     )
 
     # Strip leading noise phrases iteratively until none match

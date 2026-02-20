@@ -599,6 +599,13 @@ class SanityDataStore:
 
     async def get_family_contacts(self, patient_id: str) -> list[dict]:
         try:
+            # First try inline familyContacts on the patient document
+            patient = await self.get_patient(patient_id)
+            if patient:
+                inline = patient.get("family_contacts") or []
+                if inline and any(c.get("email") for c in inline):
+                    return inline
+            # Fallback: standalone familyMember documents
             result = await self._query_groq(
                 '*[_type == "familyMember" && $pid in patients[]._ref]',
                 {"pid": patient_id},
