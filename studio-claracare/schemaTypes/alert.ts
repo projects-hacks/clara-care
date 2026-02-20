@@ -47,6 +47,18 @@ export const alert = defineType({
       type: 'text',
     }),
     defineField({
+      name: 'suggestedAction',
+      title: 'Suggested Action',
+      type: 'text',
+      description: 'Actionable suggestion for the family member',
+    }),
+    defineField({
+      name: 'source',
+      title: 'Source',
+      type: 'string',
+      description: 'Where the alert originated (e.g., voice_agent, cognitive_pipeline)',
+    }),
+    defineField({
       name: 'acknowledged',
       title: 'Acknowledged',
       type: 'boolean',
