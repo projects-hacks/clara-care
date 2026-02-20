@@ -55,19 +55,33 @@ CONNECTION_PHRASES = [
     "spend.*time with me",
 ]
 
-KNOWN_MEDS = ["lisinopril", "vitamin d", "metformin", "aspirin", "amlodipine"]
+# NOTE: medication list is no longer hardcoded here.
+# It is passed in at call-time from the patient's profile stored in the data store.
+# See: twilio_bridge.py → analyze_transcript(transcript, medications=[...])
 
 
-async def analyze_transcript(transcript: str) -> dict:
+async def analyze_transcript(
+    transcript: str,
+    medications: list[str] | None = None,
+) -> dict:
     """
     Analyze a conversation transcript using Deepgram Text Intelligence
     + elder-care keyword analysis.
+
+    Args:
+        transcript:   Full conversation transcript text.
+        medications:  List of medication names (lowercase) for this specific
+                      patient, sourced from their profile in the data store.
+                      Defaults to an empty list — no medications will be
+                      tracked if the caller does not provide this.
     """
+    patient_meds = [m.lower() for m in (medications or [])]
+
     # 1. Deepgram Text Intelligence (summary, sentiment, topics, intents)
     dg_analysis = await _deepgram_analyze(transcript)
-    
+
     # 2. Elder-care keyword analysis (safety, meds, loneliness, connection)
-    care_analysis = _elder_care_analysis(transcript)
+    care_analysis = _elder_care_analysis(transcript, patient_meds)
     
     # 3. Memory inconsistency detection (YES -> UNSURE -> NO pattern)
     memory_flags = _detect_memory_inconsistency(transcript)
@@ -202,10 +216,13 @@ async def _deepgram_analyze(transcript: str) -> dict:
         return {}
 
 
-def _elder_care_analysis(transcript: str) -> dict:
+def _elder_care_analysis(transcript: str, medications: list[str]) -> dict:
     """
     Elder-care-specific keyword analysis for signals Deepgram
     doesn't natively detect (safety, meds, loneliness, connection).
+
+    Args:
+        medications: Lowercase medication names from the patient's profile.
     """
     patient_text = _extract_patient_text(transcript)
     patient_lower = patient_text.lower()
@@ -236,8 +253,8 @@ def _elder_care_analysis(transcript: str) -> dict:
             connection_context = patient_text[start:end].strip()
             break
     
-    # Medication tracking
-    medication_status = _extract_medication_status(transcript)
+    # Medication tracking — uses this patient's specific medication list
+    medication_status = _extract_medication_status(transcript, medications)
     
     # Action items from conversation
     action_items = []
@@ -414,13 +431,19 @@ def _scan_safety_keywords(transcript: str) -> list[str]:
     return flags
 
 
-def _extract_medication_status(transcript: str) -> dict:
-    """Extract medication mentions and whether they were taken."""
+def _extract_medication_status(transcript: str, medications: list[str]) -> dict:
+    """
+    Extract medication mentions and whether they were taken.
+
+    Args:
+        medications: Lowercase medication names from the patient's profile.
+                     An empty list means no medications are tracked for this patient.
+    """
     text_lower = transcript.lower()
     meds_mentioned = []
     discussed = False
     
-    for med in KNOWN_MEDS:
+    for med in medications:
         if med in text_lower:
             discussed = True
             taken = None

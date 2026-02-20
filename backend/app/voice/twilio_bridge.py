@@ -264,8 +264,36 @@ class TwilioCallSession:
                 
                 # ── LLM Post-Call Analysis ──────────────────────────────────
                 from app.cognitive.post_call_analyzer import analyze_transcript
-                
-                analysis = await analyze_transcript(transcript_text)
+
+                # Fetch this patient's medication list from the data store so
+                # the analyzer scans for their specific meds, not a hardcoded set.
+                patient_meds: list[str] = []
+                try:
+                    if (
+                        self.deepgram_agent
+                        and self.deepgram_agent.function_handler
+                        and hasattr(self.deepgram_agent.function_handler, "cognitive_pipeline")
+                    ):
+                        data_store = self.deepgram_agent.function_handler.cognitive_pipeline.data_store
+                        patient = await data_store.get_patient(self.patient_id)
+                        if patient:
+                            patient_meds = [
+                                m["name"].lower()
+                                for m in patient.get("medications", [])
+                                if isinstance(m, dict) and m.get("name")
+                            ]
+                            logger.info(
+                                f"[MED_CONTEXT] CallSid={self.call_sid} "
+                                f"tracking {len(patient_meds)} meds for patient {self.patient_id}: "
+                                f"{patient_meds}"
+                            )
+                except Exception as med_exc:
+                    logger.warning(
+                        f"[MED_CONTEXT] Could not fetch patient meds for {self.patient_id}: {med_exc} "
+                        f"— medication tracking will be skipped this call."
+                    )
+
+                analysis = await analyze_transcript(transcript_text, medications=patient_meds)
                 summary = analysis.get("summary", "Check-in call.")
                 detected_mood = analysis.get("mood", "neutral")
                 
