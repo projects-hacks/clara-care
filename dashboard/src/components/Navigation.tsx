@@ -22,7 +22,7 @@ export default function Navigation({ unreadAlerts = 0 }: NavigationProps) {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/20 bg-white/75 pb-0 shadow-[0_-8px_30px_-4px_rgba(0,0,0,0.05)] backdrop-blur-lg safe-bottom supports-[backdrop-filter]:bg-white/60"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100/50 bg-white/80 pb-0 shadow-[0_-8px_30px_-4px_rgba(0,0,0,0.04)] backdrop-blur-xl safe-bottom supports-[backdrop-filter]:bg-white/60"
       role="navigation"
       aria-label="Main navigation"
     >

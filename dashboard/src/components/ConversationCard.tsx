@@ -19,7 +19,7 @@ export default function ConversationCard({ conversation, onClick }: Conversation
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-gray-50/50 p-4 text-left shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] hover:ring-1 hover:ring-clara-200/50 active:scale-[0.98] active:bg-gray-50"
+      className="group flex w-full items-center gap-4 rounded-3xl bg-white p-5 text-left shadow-sm ring-1 ring-gray-900/5 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-md hover:ring-gray-200 active:scale-[0.98] active:bg-gray-50"
       type="button"
     >
       <div className="min-w-0 flex-1">

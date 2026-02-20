@@ -43,37 +43,37 @@ export default function HistoryPage() {
 
   return (
     <>
-      <TopBar title="Conversation History" subtitle="Browse what Clara talked about" />
-
-      <div className="overflow-x-auto px-4 pt-3">
-        <div className="flex gap-2 pb-1">
-          {MOOD_FILTERS.map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              className={cn(
-                'shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-colors',
-                activeFilter === filter
-                  ? 'bg-clara-600 text-white'
-                  : 'bg-white text-gray-600 shadow-sm active:bg-gray-50'
-              )}
-              type="button"
-            >
-              {filter}
-            </button>
-          ))}
+      <TopBar title="Conversation History" subtitle="Browse what Clara talked about">
+        <div className="overflow-x-auto pt-1" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-2">
+            {MOOD_FILTERS.map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                className={cn(
+                  'shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-200',
+                  activeFilter === filter
+                    ? 'bg-clara-600 text-white shadow-sm ring-1 ring-clara-600'
+                    : 'bg-gray-50 text-gray-600 ring-1 ring-gray-200/60 hover:bg-gray-100 hover:text-gray-900'
+                )}
+                type="button"
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </TopBar>
 
-      <main className="space-y-3 px-4 py-3">
-          {conversations.length > 0 && !loading && !error && (
-            <section className="rounded-2xl bg-white p-3 shadow-sm" aria-label="History summary">
-              <p className="text-xs text-gray-600">
-                You have <span className="font-semibold text-gray-900">{conversations.length}</span> recorded
-                conversations. Use the filters above to jump to calls by mood.
-              </p>
-            </section>
-          )}
+      <main className="space-y-4 px-4 py-4">
+        {conversations.length > 0 && !loading && !error && (
+          <section className="rounded-2xl bg-white p-3 shadow-sm" aria-label="History summary">
+            <p className="text-xs text-gray-600">
+              You have <span className="font-semibold text-gray-900">{conversations.length}</span> recorded
+              conversations. Use the filters above to jump to calls by mood.
+            </p>
+          </section>
+        )}
         {loading && <LoadingSpinner />}
 
         {error && (

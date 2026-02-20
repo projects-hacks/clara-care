@@ -9,13 +9,14 @@ interface TopBarProps {
   subtitle?: string
   showBack?: boolean
   rightAction?: ReactNode
+  children?: ReactNode
 }
 
-export default function TopBar({ title, subtitle, showBack, rightAction }: TopBarProps) {
+export default function TopBar({ title, subtitle, showBack, rightAction, children }: TopBarProps) {
   const router = useRouter()
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/20 bg-white/70 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md supports-[backdrop-filter]:bg-white/60">
+    <header className="sticky top-0 z-40 border-b border-gray-100/50 bg-white/80 shadow-sm ring-1 ring-gray-900/5 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60">
       <div className="flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
           {showBack && (
@@ -28,14 +29,19 @@ export default function TopBar({ title, subtitle, showBack, rightAction }: TopBa
             </button>
           )}
           <div className="min-w-0">
-            <h1 className="truncate text-[17px] font-semibold leading-tight text-gray-900">{title}</h1>
+            <h1 className="truncate text-[17px] font-bold tracking-tight text-gray-900">{title}</h1>
             {subtitle && (
-              <p className="truncate text-xs leading-snug text-gray-500">{subtitle}</p>
+              <p className="truncate text-[13px] leading-snug text-gray-500 font-medium">{subtitle}</p>
             )}
           </div>
         </div>
         {rightAction && <div className="ml-2 shrink-0">{rightAction}</div>}
       </div>
+      {children && (
+        <div className="px-4 pb-3">
+          {children}
+        </div>
+      )}
     </header>
   )
 }

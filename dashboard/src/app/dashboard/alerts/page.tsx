@@ -67,29 +67,23 @@ export default function AlertsPage() {
         subtitle="Things Clara is worried about"
         rightAction={
           unacknowledgedCount > 0 ? (
-            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white shadow-sm ring-2 ring-white">
               {unacknowledgedCount}
             </span>
           ) : undefined
         }
-      />
-
-      <div className="px-4 pt-3">
-        <section className="mb-3 rounded-2xl bg-white p-3 shadow-sm" aria-label="Alert filters">
-          <div className="mb-2 flex items-center justify-between text-[11px] text-gray-500">
-            <span>Total alerts: {alerts.length}</span>
-            <span>Unacknowledged: {unacknowledgedCount}</span>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+      >
+        <div className="overflow-x-auto pt-1" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-2">
             {SEVERITY_FILTERS.map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
                 className={cn(
-                  'shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-colors',
+                  'shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-200',
                   activeFilter === filter
-                    ? 'bg-clara-600 text-white'
-                    : 'bg-white text-gray-600 shadow-sm active:bg-gray-50'
+                    ? 'bg-clara-600 text-white shadow-sm ring-1 ring-clara-600'
+                    : 'bg-gray-50 text-gray-600 ring-1 ring-gray-200/60 hover:bg-gray-100 hover:text-gray-900'
                 )}
                 type="button"
               >
@@ -97,27 +91,35 @@ export default function AlertsPage() {
               </button>
             ))}
           </div>
+        </div>
+      </TopBar>
 
-          <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2">
-            <div className="flex flex-col text-[11px]">
-              <span className="font-medium text-gray-700">Show only unreviewed</span>
-              <span className="text-gray-400">Hide alerts you’ve already marked as reviewed</span>
+      <main className="space-y-4 px-4 py-4">
+        {alerts.length > 0 && !loading && !error && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-gray-400 px-1">
+              <span>Total alerts: {alerts.length}</span>
+              <span>Unacknowledged: {unacknowledgedCount}</span>
             </div>
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={showUnacknowledgedOnly}
-                onChange={(e) => setShowUnacknowledgedOnly(e.target.checked)}
-                className="peer sr-only"
-              />
-              <div className="h-5 w-9 rounded-full bg-gray-200 transition-colors peer-checked:bg-clara-600" />
-              <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
-            </div>
-          </label>
-        </section>
-      </div>
+            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl bg-white shadow-sm ring-1 ring-gray-900/5 px-4 py-3 transition-all hover:bg-gray-50 active:scale-[0.98]">
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-gray-900">Show only unreviewed</span>
+                <span className="mt-0.5 text-[11px] leading-snug text-gray-500">Hide alerts you’ve already verified</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={showUnacknowledgedOnly}
+                  onChange={(e) => setShowUnacknowledgedOnly(e.target.checked)}
+                  className="peer sr-only"
+                />
+                <div className="h-5 w-9 rounded-full bg-gray-200 transition-colors peer-checked:bg-clara-600 ring-1 ring-inset ring-black/5" />
+                <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm ring-1 ring-black/5 transition-transform peer-checked:translate-x-4" />
+              </div>
+            </label>
+          </div>
+        )}
 
-      <main className="space-y-3 px-4 py-3">
         {loading && <LoadingSpinner />}
 
         {error && (

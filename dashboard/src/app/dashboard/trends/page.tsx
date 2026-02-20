@@ -78,26 +78,25 @@ export default function TrendsPage() {
 
   return (
     <>
-      <TopBar title="Cognitive Trends" subtitle="See how key abilities change over time" />
-
-      {/* Time range selector */}
-      <div className="flex gap-2 px-4 pt-3" aria-label="Time range">
-        {PERIODS.map((p) => (
-          <button
-            key={p.days}
-            onClick={() => setPeriod(p.days)}
-            className={cn(
-              'rounded-full px-4 py-1.5 text-xs font-medium transition-colors',
-              period === p.days
-                ? 'bg-clara-600 text-white'
-                : 'bg-white text-gray-600 shadow-sm active:bg-gray-50'
-            )}
-            type="button"
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      <TopBar title="Cognitive Trends" subtitle="See how key abilities change over time">
+        <div className="flex gap-2 pt-1" aria-label="Time range">
+          {PERIODS.map((p) => (
+            <button
+              key={p.days}
+              onClick={() => setPeriod(p.days)}
+              className={cn(
+                'rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-200',
+                period === p.days
+                  ? 'bg-clara-600 text-white shadow-sm ring-1 ring-clara-600'
+                  : 'bg-gray-50 text-gray-600 ring-1 ring-gray-200/60 hover:bg-gray-100 hover:text-gray-900'
+              )}
+              type="button"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </TopBar>
 
       <main className="space-y-4 px-4 py-4">
         {loading && <LoadingSpinner />}

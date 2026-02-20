@@ -41,11 +41,11 @@ export default function AlertCard({ alert, onAcknowledge, familyContacts }: Aler
   return (
     <div
       className={cn(
-        'group relative overflow-hidden rounded-2xl border bg-white transition-all duration-300 ease-out',
+        'group relative overflow-hidden rounded-3xl bg-white transition-all duration-300 ease-out',
         !alert.acknowledged
-          ? ['border-transparent shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] ring-1 ring-inset', borderColor[alert.severity]]
-          : 'border-gray-100/50 opacity-60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]',
-        !alert.acknowledged && 'hover:-translate-y-0.5 hover:shadow-[0_8px_25px_-6px_rgba(0,0,0,0.12)] active:scale-[0.98]'
+          ? ['border-l-4 shadow-sm ring-1 ring-gray-900/5', borderColor[alert.severity]]
+          : 'border border-gray-100/50 opacity-60 shadow-sm ring-1 ring-gray-900/5',
+        !alert.acknowledged && 'hover:-translate-y-1 hover:shadow-md hover:ring-gray-200 active:scale-[0.98]'
       )}
     >
       {/* Header */}

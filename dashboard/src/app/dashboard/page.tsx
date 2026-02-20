@@ -130,66 +130,67 @@ export default function HomePage() {
         subtitle={patient?.name ? `Caring for ${patient.name}` : 'Today at a glance'}
       />
 
-      <main className="space-y-4 px-4 py-4">
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-clara-500/10 via-clara-50 to-white p-5 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] ring-1 ring-clara-200/50" aria-label="Overview">
-          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-clara-400/10 blur-2xl"></div>
+      <main className="space-y-6 px-4 py-4">
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-clara-50/80 via-white to-clara-50 p-6 shadow-sm ring-1 ring-gray-900/5" aria-label="Overview">
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-clara-300/10 blur-3xl"></div>
+          <div className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full bg-clara-200/20 blur-2xl"></div>
           <div className="flex items-start justify-between gap-3 relative z-10">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-clara-700/70">
-                Today’s snapshot
+              <p className="text-xs font-bold uppercase tracking-widest text-clara-600/80">
+                Today’s Snapshot
               </p>
-              <h1 className="mt-1 text-xl font-semibold text-gray-900">
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
                 Welcome back, {patient?.name.split(' ')[0] || 'Friend'}
               </h1>
-              <p className="mt-1 text-[11px] leading-snug text-gray-500">
+              <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
                 See Clara’s latest check-in, mood, and any alerts that may need your attention.
               </p>
             </div>
             <button
               onClick={handleDownloadReport}
               disabled={downloading || !patient}
-              className="flex shrink-0 flex-col items-center gap-1 rounded-xl bg-white/80 px-3 py-2 text-[10px] font-medium text-gray-700 shadow-sm ring-1 ring-gray-200/50 backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:scale-95 disabled:opacity-60"
+              className="group flex shrink-0 flex-col items-center gap-1.5 rounded-2xl bg-white px-4 py-3 text-xs font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 transition-all hover:-translate-y-1 hover:shadow-md hover:ring-gray-300 active:scale-95 disabled:opacity-50"
               aria-label="Download cognitive report PDF"
             >
-              <Download className={`h-4 w-4 ${downloading ? 'animate-bounce' : ''}`} />
-              <span>{downloading ? 'Generating…' : 'PDF Report'}</span>
+              <Download className={`h-5 w-5 text-gray-400 group-hover:text-clara-600 transition-colors ${downloading ? 'animate-bounce' : ''}`} />
+              <span>{downloading ? 'Wait…' : 'Report'}</span>
             </button>
           </div>
         </section>
 
         {/* Call Now Button */}
         {patient && (
-          <section aria-label="Call patient">
+          <section aria-label="Call patient" className="px-1">
             <CallButton
               patientId={patient.id}
               patientName={patient.preferred_name || patient.name}
               patientPhone={patient.phone_number}
-              className="mt-1"
+              className="mt-1 shadow-sm ring-1 ring-gray-900/5 transition-all hover:shadow-md"
             />
           </section>
         )}
 
         {digest && (
-          <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="Wellness Summary">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Today&apos;s Wellness</h2>
-            <div className="flex items-center gap-4">
+          <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-900/5" aria-label="Wellness Summary">
+            <h2 className="mb-4 text-base font-bold tracking-tight text-gray-900">Today&apos;s Wellness</h2>
+            <div className="flex items-center gap-5">
               <CognitiveScoreBadge
                 score={digest.cognitive_score}
                 trend={digest.cognitive_trend as 'improving' | 'stable' | 'declining'}
               />
               <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-1.5 flex items-center gap-2">
                   <MoodBadge mood={digest.overall_mood} size="sm" />
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-sm font-medium text-gray-500">
                   Cognitive score is {digest.cognitive_trend}
                 </p>
               </div>
             </div>
             {digest.highlights.length > 0 && (
-              <div className="mt-3 border-t border-gray-50 pt-3">
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">Highlights</p>
-                <ul className="space-y-2">
+              <div className="mt-5 border-t border-gray-100 pt-5">
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">Key Highlights</p>
+                <ul className="space-y-2.5">
                   {digest.highlights.slice(0, 3).map((h, i) => {
                     const isWarning = h.startsWith('⚠️')
                     return (
