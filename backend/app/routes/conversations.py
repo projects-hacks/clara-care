@@ -134,17 +134,26 @@ def _clean_summary(raw: str) -> str:
         "She talked about ", text, flags=re.I
     )
 
-    # Step 6: Replace impersonal labels with personalized references
+    # Step 6: Replace impersonal role labels
+    # "the representative" / "the host" → "Clara" (more natural than 'the companion')
     text = re.sub(r"\bthe representative\b", "Clara", text, flags=re.I)
-    text = re.sub(r"\bthe host\b", "Clara", text, flags=re.I)
+    # NOTE: do NOT replace "Clara" with "the companion" — it garbles natural summaries
+    # e.g. "Clara and Emily discussed lunch" should stay as-is
 
-    # Step 7: Strip filler closing sentences
+    # Step 7: Replace Deepgram generic patient labels → pronouns
+    text = re.sub(r"\bthe elderly (?:adult|patient|woman|man)\b", "she", text, flags=re.I)
+    text = re.sub(r"\bthe (?:caller|customer)\b", "she", text, flags=re.I)
+    text = _THE_PATIENT_SUBJECT.sub("She", text)
+    text = _THE_PATIENT_OBJECT.sub("her", text)
+    text = _THEIR_POSSESSIVE.sub("her", text)
+
+    # Step 8: Strip filler closing sentences
     text = re.sub(
         r"The call (?:ends|ended) with (?:her|she) (?:thanking|saying)[^.]+\.\s*",
         "", text, flags=re.I
     )
 
-    # Strip leading noise phrases iteratively until none match
+    # Step 9: Strip noise pattern list (iterative)
     changed = True
     while changed:
         changed = False
@@ -153,18 +162,6 @@ def _clean_summary(raw: str) -> str:
             if new != text:
                 text = new
                 changed = True
-
-    # Replace remaining inline "Clara" references
-    text = _CLARA_REF.sub("the companion", text)
-    # Replace Deepgram generic persona labels → pronouns
-    text = re.sub(r"\bthe elderly (?:adult|patient|woman|man)\b", "she", text, flags=re.I)
-    text = re.sub(r"\bthe (?:caller|customer|host and (?:the )?caller)\b", "she", text, flags=re.I)
-    # Replace "The patient" (sentence start) → "She"
-    text = _THE_PATIENT_SUBJECT.sub("She", text)
-    # Replace "the patient" (mid-sentence) → "her"
-    text = _THE_PATIENT_OBJECT.sub("her", text)
-    # Replace "their" → "her" (patient is female)
-    text = _THEIR_POSSESSIVE.sub("her", text)
 
 
     # Clean up spacing artefacts
