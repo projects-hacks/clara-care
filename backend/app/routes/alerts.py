@@ -169,10 +169,14 @@ def _normalize_alert(alert: dict) -> dict:
     alert_type = alert.get("alert_type", "")
     description = alert.get("description", "")
 
-    if _is_legacy_description(description):
+    if not description and alert_type == "social_connection":
+        alert = dict(alert)
+        alert["description"] = "She asked to speak with you or a family member."
+    elif _is_legacy_description(description):
         plain = _PLAIN_DESCRIPTIONS.get(alert_type)
         if plain:
-            alert = dict(alert)  # shallow copy — don't mutate the store
+            if not isinstance(alert, dict) or alert is locals().get('alert'):
+                alert = dict(alert)  # shallow copy
             alert["description"] = plain
 
     # Always re-derive suggested_action — overwrites any stale Sanity value

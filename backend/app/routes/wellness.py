@@ -156,7 +156,15 @@ _NOISE_STRIP_PATTERNS = [
     re.compile(r"Summarizing the call,?\s*Clara[^.]+\.\s*", re.I),
     # Bare "Summarizing the call,"
     re.compile(r"Summarizing the call,?\s*", re.I),
+    # Deepgram caller and host
+    re.compile(r"A (?:caller|customer) and (?:a |the )?host discuss(?:es)?[^.]+\.\s*", re.I),
+    re.compile(r"(?:They|The host and (?:the )?caller) (?:also )?(?:discuss(?:es)?|talk(?:s)? about)[^.]+\.\s*", re.I),
+    re.compile(r"They discuss [^.]+\.\s*", re.I),
 ]
+
+_THE_PATIENT_SUBJECT = re.compile(r"\bThe patient\b")
+_THE_PATIENT_OBJECT  = re.compile(r"\bthe patient\b")
+_THEIR_POSSESSIVE = re.compile(r"\btheir\b", re.I)
 
 
 def _clean_highlight(h: str) -> str:
@@ -173,6 +181,14 @@ def _clean_highlight(h: str) -> str:
     # Then strip noise phrases that are partial prefixes
     for pattern in _NOISE_STRIP_PATTERNS:
         h = pattern.sub("", h).strip()
+
+    # Apply pronoun replacements
+    h = _THE_PATIENT_SUBJECT.sub("She", h)
+    h = _THE_PATIENT_OBJECT.sub("her", h)
+    h = _THEIR_POSSESSIVE.sub("her", h)
+    h = re.sub(r"\bthe elderly (?:adult|patient|woman|man)\b", "she", h, flags=re.I)
+    h = re.sub(r"\bthe (?:caller|customer|host and (?:the )?caller)\b", "she", h, flags=re.I)
+
     # Capitalise and fix trailing punctuation
     if h and not h[0].isupper():
         h = h[0].upper() + h[1:]

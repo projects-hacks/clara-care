@@ -6,8 +6,8 @@ import { Clock, Sparkles, Star, MessageCircle, Brain, AlertTriangle, TrendingUp,
 import TopBar from '@/components/TopBar'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import MoodBadge from '@/components/MoodBadge'
-import { getConversation } from '@/lib/api'
-import type { Conversation } from '@/lib/api'
+import { getConversation, getPatient, getPatientId } from '@/lib/api'
+import type { Conversation, Patient } from '@/lib/api'
 import { formatDate, formatDuration, metricLabel, cn } from '@/lib/utils'
 
 // ─── Metric helpers ──────────────────────────────────────────────────────────
@@ -121,18 +121,23 @@ export default function ConversationDetailPage() {
   const params = useParams()
   const id = params.id as string
   const [conversation, setConversation] = useState<Conversation | null>(null)
+  const [patient, setPatient] = useState<Patient | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await getConversation(id)
+        const [data, patientData] = await Promise.all([
+          getConversation(id),
+          getPatient(getPatientId()),
+        ])
         if (!data) {
           setError('Conversation not found')
           return
         }
         setConversation(data)
+        setPatient(patientData)
       } catch {
         setError('Failed to load conversation')
       } finally {
@@ -398,7 +403,7 @@ export default function ConversationDetailPage() {
                     )}
                   >
                     <p className={cn('mb-0.5 text-[10px] font-semibold', isClara ? 'text-gray-400' : 'text-clara-100')}>
-                      {isClara ? 'Clara' : line.speaker}
+                      {isClara ? 'Clara' : (patient?.name?.split(' ')[0] || line.speaker)}
                     </p>
                     <p className="text-sm leading-relaxed">{line.text}</p>
                   </div>

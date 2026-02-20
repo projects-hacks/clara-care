@@ -59,11 +59,11 @@ _SUMMARY_NOISE = [
     re.compile(r"A customer named Clara[^.]+\.\s*", re.I),
     # --- Deepgram generic-label structural preambles ---
     # "A caller and a host discuss a wellness phone call with an elderly adult."
-    re.compile(r"A (?:caller|customer) and (?:a |the )?host discuss(?:es)?[^.]+\.\s*", re.I),
+    re.compile(r"A (?:caller|customer) and (?:a |the )?host discuss(?:es)?.*?\.\s*", re.I),
     # "They discuss the importance of..." / "They also talk about..."
-    re.compile(r"^(?:They|The host and (?:the )?caller) (?:also )?(?:discuss(?:es)?|talk(?:s)? about)[^.]+\.\s*", re.I | re.M),
+    re.compile(r"(?:They|The host and (?:the )?caller) (?:also )?(?:discuss(?:es)?|talk(?:s)? about).*?\.\s*", re.I),
     # "They discuss" mid-sentence (leftover)
-    re.compile(r"^They discuss [^.]+\.\s*", re.I),
+    re.compile(r"They discuss .*?\.\s*", re.I),
     # "Patient discussed:" fallback prefix
     re.compile(r"^Patient discussed:\s*", re.I),
     # "Topic: " prefix
@@ -92,6 +92,34 @@ def _clean_summary(raw: str) -> str:
         return raw
 
     text = raw.strip()
+    
+    # Transform Deepgram structural preambles into personalized summaries
+    # Step 1: Remove the generic opener entirely
+    text = re.sub(
+        r"A (?:caller|customer) and (?:a |the )?host discuss(?:es)? a wellness phone call "
+        r"with an elderly (?:adult|patient|woman|man)\.\s*",
+        "", text, flags=re.I
+    )
+    # Step 2: Transform "They discuss the importance of X" → "She talked about X"
+    text = re.sub(
+        r"They discuss(?:es)? the importance of ",
+        "She talked about ", text, flags=re.I
+    )
+    # Step 3: Transform "They also talk about the importance of X" → "She also mentioned X"
+    text = re.sub(
+        r"They also (?:talk|talked) about the importance of ",
+        "She also mentioned ", text, flags=re.I
+    )
+    # Step 4: Transform remaining "They also talk/discuss about X" → "She also talked about X"
+    text = re.sub(
+        r"They also (?:talk|talked|discuss(?:es)?) about ",
+        "She also talked about ", text, flags=re.I
+    )
+    # Step 5: Transform "They discuss X" → "She talked about X"
+    text = re.sub(
+        r"They discuss(?:es)? ",
+        "She talked about ", text, flags=re.I
+    )
 
     # Strip leading noise phrases iteratively until none match
     changed = True
@@ -131,14 +159,30 @@ def _clean_summary(raw: str) -> str:
     return text
 
 
-def _normalize_conversation(conv: dict) -> dict:
+async def _normalize_conversation(conv: dict, store) -> dict:
     """Normalize a conversation record before serving it to the frontend."""
     if not conv:
         return conv
 
     summary = conv.get("summary", "")
     clean = _clean_summary(summary)
-    if clean != summary:
+    
+    # Fallback: if summary is missing or empty after cleaning (e.g. it was entirely noise)
+    if not clean:
+        try:
+            digest = await store.get_latest_wellness_digest(conv.get("patient_id"))
+            if digest and digest.get("conversation_id") == conv.get("id"):
+                highlights = digest.get("highlights", [])
+                if highlights:
+                    from app.routes.wellness import _clean_highlight
+                    clean_lines = [_clean_highlight(h) for h in highlights]
+                    clean_lines = [line for line in clean_lines if len(line) > 10]
+                    clean = " ".join(clean_lines)
+        except Exception:
+            pass
+
+    # If we generated a fallback or cleaned an existing one, update the dict
+    if clean != summary or not conv.get("summary"):
         conv = dict(conv)
         conv["summary"] = clean
 
@@ -166,11 +210,13 @@ async def list_conversations(
     store = get_data_store()
 
     conversations = await store.get_conversations(patient_id, limit=limit, offset=offset)
-    conversations = [_normalize_conversation(c) for c in conversations]
+    normalized_convs = []
+    for c in conversations:
+        normalized_convs.append(await _normalize_conversation(c, store))
 
     return {
         "patient_id": patient_id,
-        "conversations": conversations,
+        "conversations": normalized_convs,
         "count": len(conversations),
         "limit": limit,
         "offset": offset
@@ -194,7 +240,7 @@ async def get_conversation(conversation_id: str):
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    return _normalize_conversation(conversation)
+    return await _normalize_conversation(conversation, store)
 
 
 @router.post("")
