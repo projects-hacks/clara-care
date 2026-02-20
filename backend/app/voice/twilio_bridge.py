@@ -345,29 +345,9 @@ class TwilioCallSession:
                     }
                 )
                 
-                # ── Low-coherence auto-alert ─────────────────────────────────
-                if pipeline_result and pipeline_result.get("success"):
-                    metrics = pipeline_result.get("metrics", {})
-                    coherence = metrics.get("topic_coherence")
-                    if (coherence is not None and coherence < 0.40
-                            and self.deepgram_agent and self.deepgram_agent.function_handler):
-                        logger.warning(
-                            f"[COHERENCE_ALERT] CallSid={self.call_sid} coherence={coherence:.2f}"
-                        )
-                        await self.deepgram_agent.function_handler.execute(
-                            "trigger_alert",
-                            {
-                                "patient_id": self.patient_id,
-                                "severity": "medium",
-                                "alert_type": "coherence_drop",
-                                "message": (
-                                    "Today's conversation was noticeably harder to follow than usual. "
-                                    "She jumped between topics frequently and had difficulty staying on the same thread. "
-                                    "This can be a sign of confusion or difficulty concentrating, "
-                                    "and may be worth checking in about."
-                                )
-                            }
-                        )
+                # NOTE: Low-coherence alerts are now handled by the pipeline's
+                # check_and_alert with proper dedup. Removed redundant auto-alert
+                # that was creating duplicate coherence_drop alerts.
                 
                 if pipeline_result and pipeline_result.get("success"):
                     logger.info(

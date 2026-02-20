@@ -117,7 +117,7 @@ class FoxitPDFServicesClient:
             json={"documentId": document_id},
             headers={"Content-Type": "application/json"},
         )
-        if resp.status_code == 200:
+        if resp.status_code in (200, 202):
             data = resp.json()
             task_id = data.get("taskId")
             logger.info(f"  ✓ Create-PDF → taskId={task_id}")
