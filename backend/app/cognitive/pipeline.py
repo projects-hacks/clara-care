@@ -16,7 +16,7 @@ try:
 except ImportError:
     _GEMINI_AVAILABLE = False
 
-from .utils import calculate_cognitive_score
+from .utils import calculate_cognitive_score, get_pronouns
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,8 @@ class CognitivePipeline:
             return {"success": False, "error": "Patient not found"}
         
         patient_name = patient.get("preferred_name") or patient.get("name") or "Patient"
+        self._patient_name = patient_name   # stash for pronoun helpers
+        self._p = get_pronouns(patient_name)  # pronoun dict
         
         # Get recent conversation history for cross-conversation repetition detection
         recent_convos = await self.data_store.get_conversations(patient_id=patient_id, limit=5)
@@ -315,9 +317,9 @@ class CognitivePipeline:
         if safety_flags:
             context_lines.append(f"⚠️ Safety concern flagged: {safety_flags[0]}")
         if desire_to_connect:
-            context_lines.append("She expressed wanting to connect with family.")
+            context_lines.append(f"{self._p['Sub']} expressed wanting to connect with family.")
         if memory_flags:
-            context_lines.append("She gave conflicting answers during the call.")
+            context_lines.append(f"{self._p['Sub']} gave conflicting answers during the call.")
         if coherence is not None and coherence < 0.40:
             context_lines.append(f"Conversation coherence was low ({coherence:.2f}).")
         
@@ -412,8 +414,8 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
             safety_flags = analysis.get("safety_flags", [])
             if safety_flags:
                 highlights.append(
-                    "⚠️ She said something during this call that is a cause for concern. "
-                    "Please review the alert and consider reaching out to her soon."
+                    f"⚠️ {self._p['Sub'].capitalize()} said something during this call that is a cause for concern. "
+                    f"Please review the alert and consider reaching out to {self._p['obj']} soon."
                 )
 
             # 4. Medication info
@@ -427,10 +429,11 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
 
             # 5. Engagement level
             engagement = analysis.get("engagement_level", "")
+            p = self._p
             engagement_text = {
-                "high": "She was chatty and engaged throughout the call — a great sign.",
-                "medium": "She had a comfortable, relaxed conversation today.",
-                "low": "She was quieter than usual. A follow-up check-in might be helpful.",
+                "high": f"{p['Sub']} was chatty and engaged throughout the call — a great sign.",
+                "medium": f"{p['Sub']} had a comfortable, relaxed conversation today.",
+                "low": f"{p['Sub']} was quieter than usual. A follow-up check-in might be helpful.",
             }
             if engagement and engagement in engagement_text:
                 highlights.append(engagement_text[engagement])
@@ -439,8 +442,8 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
             memory_flags = analysis.get("memory_inconsistency", [])
             if memory_flags:
                 highlights.append(
-                    "⚠️ She gave some conflicting answers during the conversation. "
-                    "This can sometimes be an early sign of short-term memory changes and is worth watching."
+                    f"⚠️ {self._p['Sub']} gave some conflicting answers during the conversation. "
+                    f"This can sometimes be an early sign of short-term memory changes and is worth watching."
                 )
 
         # 7. Low coherence — plain language, no raw number
@@ -448,8 +451,8 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
             coherence = metrics.get("topic_coherence")
             if coherence is not None and coherence < 0.40:
                 highlights.append(
-                    "⚠️ Today's conversation was harder to follow than usual — she jumped between topics "
-                    "and had difficulty staying on one thread. This may be worth a gentle check-in."
+                    f"⚠️ Today's conversation was harder to follow than usual — {self._p['sub']} jumped between topics "
+                    f"and had difficulty staying on one thread. This may be worth a gentle check-in."
                 )
 
         # Fallback
@@ -466,7 +469,7 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
         """
         Generate suggested actions the FAMILY MEMBER can take.
         Every item must be something the family member can actually do —
-        call her, visit, talk to her doctor, etc.
+        call, visit, talk to the doctor, etc.
         Nothing that requires controlling the environment or the call.
         """
         recommendations = []
@@ -477,23 +480,26 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
 
         # Low coherence — family should reach out personally
         if coherence is not None and coherence < 0.25:
+            p = self._p
             recommendations.append(
-                "Consider giving her a call yourself today — a familiar voice can help when "
-                "she's having a harder time expressing herself."
+                f"Consider giving {p['obj']} a call yourself today — a familiar voice can help when "
+                f"{p['sub']}'s having a harder time expressing {p['ref']}."
             )
 
         # Word-finding difficulty — worth flagging to doctor if persistent
         if word_pauses > 5:
+            p = getattr(self, '_p', get_pronouns())
             recommendations.append(
-                "If you notice this pattern continuing over the next few days, "
-                "mention it at her next doctor's appointment."
+                f"If you notice this pattern continuing over the next few days, "
+                f"mention it at {p['pos']} next doctor's appointment."
             )
 
         # High repetition — redirect with engagement
         if repetition > 0.15:
+            p = getattr(self, '_p', get_pronouns())
             recommendations.append(
-                "Try calling her and asking about a specific memory or activity she enjoys — "
-                "fresh topics can help break repetitive patterns."
+                f"Try calling {p['obj']} and asking about a specific memory or activity {p['sub']} enjoys — "
+                f"fresh topics can help break repetitive patterns."
             )
 
         # Baseline-based
@@ -504,9 +510,10 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
                     / baseline["vocabulary_diversity"] * 100
                 )
                 if vocab_dev < -15:
+                    p = getattr(self, '_p', get_pronouns())
                     recommendations.append(
-                        "Her language felt more limited than usual. A visit or call with "
-                        "richer conversation — stories, photos, news — could help stimulate her."
+                        f"{p['Pos']} language felt more limited than usual. A visit or call with "
+                        f"richer conversation — stories, photos, news — could help stimulate {p['obj']}."
                     )
 
             if coherence is not None and baseline.get("topic_coherence"):
@@ -515,9 +522,10 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
                     / baseline["topic_coherence"] * 100
                 )
                 if coherence_dev < -15:
+                    p = getattr(self, '_p', get_pronouns())
                     recommendations.append(
-                        "This pattern has lasted a few conversations — it may be worth "
-                        "bringing up at her next doctor visit."
+                        f"This pattern has lasted a few conversations — it may be worth "
+                        f"bringing up at {p['pos']} next doctor visit."
                     )
 
         return recommendations

@@ -3,6 +3,68 @@ Shared utility functions for Cognitive Analysis
 """
 
 
+# ── Pronoun helper ──────────────────────────────────────────────
+# Returns a dict of pronoun forms derived from the patient's name.
+# Used across pipeline, alerts, and notifications so nothing is
+# hardcoded to a single gender.
+
+_MALE_NAMES = {
+    "mark", "james", "john", "robert", "michael", "william", "david",
+    "richard", "joseph", "thomas", "charles", "christopher", "daniel",
+    "matthew", "anthony", "andrew", "joshua", "kenneth", "kevin", "brian",
+    "george", "edward", "ronald", "timothy", "jason", "jeffrey", "ryan",
+    "jacob", "gary", "nicholas", "eric", "stephen", "larry", "justin",
+    "scott", "brandon", "benjamin", "samuel", "raymond", "patrick", "frank",
+    "henry", "jack", "peter", "paul", "carl", "roger", "albert", "arthur",
+    "harry", "ralph", "eugene", "roy", "louis", "russell", "philip", "adam",
+    "aaron", "sean", "howard", "fred", "tyler", "alan", "dylan", "bruce",
+}
+
+_FEMALE_NAMES = {
+    "dorothy", "emily", "mary", "patricia", "jennifer", "linda", "barbara",
+    "elizabeth", "susan", "jessica", "sarah", "karen", "nancy", "lisa",
+    "betty", "margaret", "sandra", "ashley", "kimberly", "donna", "michelle",
+    "carol", "amanda", "melissa", "deborah", "stephanie", "rebecca", "sharon",
+    "laura", "cynthia", "kathleen", "amy", "shirley", "angela", "helen",
+    "anna", "brenda", "pamela", "emma", "nicole", "katherine", "christine",
+    "janet", "catherine", "maria", "heather", "diane", "ruth", "julie",
+    "olivia", "joyce", "virginia", "victoria", "kelly", "lauren", "christina",
+    "joan", "evelyn", "judith", "megan", "andrea", "cheryl", "hannah",
+    "jacqueline", "martha", "gloria", "teresa", "ann", "sara", "madison",
+    "frances", "kathryn", "janice", "jean", "abigail", "alice", "judy",
+    "sophia", "grace", "denise", "amber", "doris", "marilyn", "danielle",
+    "beverly", "isabella", "theresa", "diana", "natalie", "brittany", "charlotte",
+    "marie", "kayla", "alexis", "lori", "clara",
+}
+
+
+def get_pronouns(patient_name: str | None = None) -> dict:
+    """
+    Return a dict of pronoun forms for the given patient name.
+
+    Keys: sub, obj, pos, ref  (lowercase)
+          Sub, Obj, Pos, Ref  (capitalized)
+
+    Example for male:  {"sub": "he",  "obj": "him", "pos": "his",  "ref": "himself",
+                        "Sub": "He",  "Obj": "Him", "Pos": "His",  "Ref": "Himself"}
+    Example for female: {"sub": "she", "obj": "her", "pos": "her",  "ref": "herself",
+                         "Sub": "She", "Obj": "Her", "Pos": "Her",  "Ref": "Herself"}
+    """
+    first = (patient_name or "").split()[0].strip().lower()
+
+    if first in _MALE_NAMES:
+        d = {"sub": "he", "obj": "him", "pos": "his", "ref": "himself"}
+    elif first in _FEMALE_NAMES:
+        d = {"sub": "she", "obj": "her", "pos": "her", "ref": "herself"}
+    else:
+        # Default to gender-neutral "they"
+        d = {"sub": "they", "obj": "them", "pos": "their", "ref": "themselves"}
+
+    # Capitalised variants
+    d.update({k.capitalize(): v.capitalize() for k, v in d.items()})
+    return d
+
+
 def calculate_cognitive_score(metrics: dict) -> int:
     """
     Calculate composite cognitive score (0-100) from NLP metrics

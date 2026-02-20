@@ -540,8 +540,8 @@ export default function LandingPage() {
                                             <Bell className="h-4 w-4 text-amber-600" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-semibold text-amber-900">She used fewer words than usual</p>
-                                            <p className="mt-0.5 text-xs text-amber-700">💡 Try asking about her garden — it usually gets her talking</p>
+                                            <p className="text-sm font-semibold text-amber-900">Fewer words than usual today</p>
+                                            <p className="mt-0.5 text-xs text-amber-700">💡 Try asking about the garden — it usually gets the conversation going</p>
                                         </div>
                                     </div>
                                     {/* Mini conversation card */}
@@ -551,8 +551,8 @@ export default function LandingPage() {
                                             <p className="text-xs font-medium text-gray-500">Today&apos;s Call — 8 min</p>
                                         </div>
                                         <p className="mt-2 text-sm text-gray-700">
-                                            &ldquo;She talked about her grandchildren visiting last weekend
-                                            and mentioned missing her daughter. Mood: happy. Engagement: high.&rdquo;
+                                            &ldquo;Talked about grandchildren visiting last weekend
+                                            and mentioned missing family. Mood: happy. Engagement: high.&rdquo;
                                         </p>
                                     </div>
                                     {/* Mini digest card */}

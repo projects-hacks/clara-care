@@ -23,6 +23,8 @@ import os
 import re
 from typing import Optional
 
+from .utils import get_pronouns
+
 import httpx
 
 try:
@@ -339,6 +341,7 @@ def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict
     """Merge Deepgram intelligence with elder-care analysis into unified result."""
     ctx = patient_context or {}
     pname = ctx.get("preferred_name") or ctx.get("name", "").split()[0] if ctx.get("name") else "The patient"
+    p = get_pronouns(pname)
     
     # Summary: Gemini LLM generates this (injected into dg dict in analyze_transcript)
     summary = dg.get("summary", "")
@@ -353,11 +356,11 @@ def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict
     if safety_flags:
         mood = "distressed"
         mood_explanation = (
-            "She said something during the call that raises a safety concern and needs your attention right away."
+            f"{p['Sub']} said something during the call that raises a safety concern and needs your attention right away."
         )
     elif loneliness:
         mood = "sad"
-        mood_explanation = "She expressed feelings of loneliness or missing people she loves."
+        mood_explanation = f"{p['Sub']} expressed feelings of loneliness or missing people {p['sub']} loves."
     else:
         dg_sentiment = dg.get("sentiment", "neutral")
         mood_map = {
@@ -571,13 +574,13 @@ def _extract_medication_status(transcript: str, medications: list[str]) -> dict:
         # Build a human-readable note for this medication
         med_name = med.title()
         if taken is True and was_corrected:
-            note = f"She initially said no to {med_name} but later confirmed she took it (pill box was empty)."
+            note = f"{p['Sub']} initially said no to {med_name} but later confirmed {p['sub']} took it (pill box was empty)."
         elif taken is True:
-            note = f"She confirmed she took her {med_name}."
+            note = f"{p['Sub']} confirmed {p['sub']} took {p['pos']} {med_name}."
         elif taken is False:
-            note = f"She said she did not take her {med_name}."
+            note = f"{p['Sub']} said {p['sub']} did not take {p['pos']} {med_name}."
         else:
-            note = f"She mentioned {med_name} but didn't clearly confirm whether she took it."
+            note = f"{p['Sub']} mentioned {med_name} but didn't clearly confirm whether {p['sub']} took it."
 
         meds_mentioned.append({"name": med_name, "taken": taken, "note": note})
 

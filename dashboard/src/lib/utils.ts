@@ -134,39 +134,39 @@ export function alertIcon(alertType: string): string {
 export function alertSuggestedAction(alertType: string, fallback?: string): string {
   const map: Record<string, string> = {
     word_finding_difficulty:
-      "Call her and let the conversation flow at her pace. If this keeps happening, mention it to her doctor at the next visit.",
+      "Call them and let the conversation flow at their pace. If this keeps happening, mention it to their doctor at the next visit.",
     repetition_increase:
-      "Give her a ring and bring up something new — upcoming family plans, a shared memory, or something she is looking forward to.",
+      "Give them a ring and bring up something new — upcoming family plans, a shared memory, or something they are looking forward to.",
     vocabulary_decline:
-      "Give her a call and chat about something she loves — a favourite memory, a family story, or what has been on her mind.",
+      "Give them a call and chat about something they love — a favourite memory, a family story, or what has been on their mind.",
     vocabulary_shrinkage:
-      "Give her a call and chat about something she loves — a favourite memory, a family story, or what has been on her mind.",
+      "Give them a call and chat about something they love — a favourite memory, a family story, or what has been on their mind.",
     mood_distress:
-      "Call her right away and let her know you are thinking of her. If she seems very distressed, consider arranging a visit.",
+      "Call them right away and let them know you are thinking of them. If they seem very distressed, consider arranging a visit.",
     distress:
-      "Call her right away and let her know you are thinking of her. If she seems very distressed, consider arranging a visit or contacting her caregiver.",
+      "Call them right away and let them know you are thinking of them. If they seem very distressed, consider arranging a visit or contacting their caregiver.",
     response_latency:
-      "Check in with her — a short call to ask how she is feeling today goes a long way.",
+      "Check in with them — a short call to ask how they are feeling today goes a long way.",
     response_delay:
-      "Check in with her — a short call to ask how she is feeling today goes a long way.",
+      "Check in with them — a short call to ask how they are feeling today goes a long way.",
     coherence_drop:
-      "Call her yourself today. Keep it light and ask one thing at a time — a familiar voice makes a real difference.",
+      "Call them yourself today. Keep it light and ask one thing at a time — a familiar voice makes a real difference.",
     cognitive_decline:
-      "Bring this up at her next doctor appointment — mention the dates and what you have noticed.",
+      "Bring this up at their next doctor appointment — mention the dates and what you have noticed.",
     confusion_detected:
-      "Give her a reassuring call or, if possible, pop in for a visit. Let her doctor know if this is becoming more frequent.",
+      "Give them a reassuring call or, if possible, pop in for a visit. Let their doctor know if this is becoming more frequent.",
     emergency:
-      "Call her immediately. If you cannot reach her, contact emergency services or her on-site caregiver.",
+      "Call them immediately. If you cannot reach them, contact emergency services or their on-site caregiver.",
     fall:
-      "Call her immediately to confirm she is safe. If you cannot reach her, contact her caregiver or a neighbour right away.",
+      "Call them immediately to confirm they are safe. If you cannot reach them, contact their caregiver or a neighbour right away.",
     social_connection:
-      "She is missing you. Give her a call or plan a visit — even just 10 minutes together means a lot.",
+      "They are missing you. Give them a call or plan a visit — even just 10 minutes together means a lot.",
     patient_request:
-      "She asked Clara for help with something. Check the details and see if you can help.",
+      "They asked Clara for help with something. Check the details and see if you can help.",
     medication_concern:
-      "She mentioned a medication side effect. Consider calling to check in and mentioning it to her doctor.",
+      "They mentioned a medication side effect. Consider calling to check in and mentioning it to their doctor.",
   }
-  return map[alertType] ?? fallback ?? "Give her a call to check in, and mention this to her doctor if it keeps happening."
+  return map[alertType] ?? fallback ?? "Give them a call to check in, and mention this to their doctor if it keeps happening."
 }
 
 

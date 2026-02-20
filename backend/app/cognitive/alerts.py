@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime, UTC
 from typing import Optional
 
+from .utils import get_pronouns
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +26,7 @@ class AlertEngine:
         """
         self.data_store = data_store
         self.notification_service = notification_service
-        self.default_consecutive_trigger = 3
+        self.default_consecutive_trigger = 2
     
     async def check_and_alert(
         self,
@@ -46,6 +48,9 @@ class AlertEngine:
             "consecutive_trigger",
             self.default_consecutive_trigger
         )
+        # Derive pronouns from patient name
+        pname = patient.get("preferred_name") or patient.get("name") or "Patient"
+        self._p = get_pronouns(pname)
         
         # Fetch existing unacknowledged alerts for dedup
         existing_alerts = await self.data_store.get_alerts(patient_id, limit=50)
@@ -169,8 +174,9 @@ class AlertEngine:
         }.get(severity, "a")
 
         # How many conversations back the pattern spans
+        p = getattr(self, '_p', get_pronouns())
         if consecutive <= 1:
-            pattern_phrase = "her most recent conversation"
+            pattern_phrase = f"{p['pos']} most recent conversation"
         elif consecutive == 2:
             pattern_phrase = "the last 2 conversations"
         else:
@@ -178,85 +184,86 @@ class AlertEngine:
 
         descriptions = {
             "vocabulary_diversity": (
-                f"She has been using a more limited range of words than usual across {pattern_phrase}. "
-                "This can sometimes happen when someone is feeling tired, stressed, or experiencing subtle memory changes. "
-                "It's worth keeping an eye on."
+                f"{p['Sub']} has been using a more limited range of words than usual across {pattern_phrase}. "
+                f"This can sometimes happen when someone is feeling tired, stressed, or experiencing subtle memory changes. "
+                f"It's worth keeping an eye on."
             ),
             "topic_coherence": (
-                f"Her conversations have been harder to follow than usual across {pattern_phrase}. "
-                "She may be jumping between topics or losing the thread of what she was saying more than is typical for her. "
-                "This can indicate moments of confusion or difficulty concentrating."
+                f"{p['Pos']} conversations have been harder to follow than usual across {pattern_phrase}. "
+                f"{p['Sub']} may be jumping between topics or losing the thread of what {p['sub']} was saying more than is typical. "
+                f"This can indicate moments of confusion or difficulty concentrating."
             ),
             "repetition_rate": (
-                f"She has been repeating certain stories or phrases more often than usual across {pattern_phrase}. "
-                "Repetition can sometimes be a sign of something on her mind, or it may reflect short-term memory changes worth watching."
+                f"{p['Sub']} has been repeating certain stories or phrases more often than usual across {pattern_phrase}. "
+                f"Repetition can sometimes be a sign of something on {p['pos']} mind, or it may reflect short-term memory changes worth watching."
             ),
             "word_finding_pauses": (
-                f"She has been stopping more often to search for words during {pattern_phrase}. "
-                "You might notice phrases like \"um,\" \"you know,\" or sentences that trail off. "
-                "While this can be normal with age, the increase compared to her usual pattern is worth noting."
+                f"{p['Sub']} has been stopping more often to search for words during {pattern_phrase}. "
+                f"You might notice phrases like \"um,\" \"you know,\" or sentences that trail off. "
+                f"While this can be normal with age, the increase compared to {p['pos']} usual pattern is worth noting."
             ),
             "response_latency": (
-                f"She has been taking longer than usual to respond in conversations across {pattern_phrase}. "
-                "This can be a sign of fatigue, reduced concentration, or difficulty processing what was said."
+                f"{p['Sub']} has been taking longer than usual to respond in conversations across {pattern_phrase}. "
+                f"This can be a sign of fatigue, reduced concentration, or difficulty processing what was said."
             ),
         }
 
         return descriptions.get(
             metric_name,
             (
-                f"We noticed {severity_qualifier} change in her conversation patterns across {pattern_phrase}. "
-                "This may be worth monitoring."
+                f"We noticed {severity_qualifier} change in {p['pos']} conversation patterns across {pattern_phrase}. "
+                f"This may be worth monitoring."
             ),
         )
 
     def _get_suggested_action(self, alert_type: str) -> str:
         """Return a concrete action the FAMILY MEMBER can take for this alert type."""
+        p = getattr(self, '_p', get_pronouns())
         actions = {
             "vocabulary_shrinkage": (
-                "Give her a call and chat about something she loves — "
-                "a favourite memory, a family story, or what's been on her mind."
+                f"Give {p['obj']} a call and chat about something {p['sub']} loves — "
+                f"a favourite memory, a family story, or what's been on {p['pos']} mind."
             ),
             "coherence_drop": (
-                "Call her yourself today. Keep the conversation light and ask one thing at a time — "
-                "a familiar voice makes a real difference."
+                f"Call {p['obj']} yourself today. Keep the conversation light and ask one thing at a time — "
+                f"a familiar voice makes a real difference."
             ),
             "repetition_increase": (
-                "Give her a ring and introduce a new topic like upcoming family plans or a shared memory — "
-                "it gives her something fresh to talk about."
+                f"Give {p['obj']} a ring and introduce a new topic like upcoming family plans or a shared memory — "
+                f"it gives {p['obj']} something fresh to talk about."
             ),
             "word_finding_difficulty": (
-                "Call her and let the conversation flow at her pace. "
-                "If this keeps happening, mention it to her doctor at the next visit."
+                f"Call {p['obj']} and let the conversation flow at {p['pos']} pace. "
+                f"If this keeps happening, mention it to {p['pos']} doctor at the next visit."
             ),
             "response_delay": (
-                "Check in with her — a short call to ask how she's feeling today goes a long way."
+                f"Check in with {p['obj']} — a short call to ask how {p['sub']}'s feeling today goes a long way."
             ),
             "distress": (
-                "Call her right away and let her know you're thinking of her. "
-                "If she seems very distressed, consider arranging a visit or contacting her caregiver."
+                f"Call {p['obj']} right away and let {p['obj']} know you're thinking of {p['obj']}. "
+                f"If {p['sub']} seems very distressed, consider arranging a visit or contacting {p['pos']} caregiver."
             ),
             "confusion_detected": (
-                "Give her a reassuring call or, if possible, pop in for a visit. "
-                "Let her doctor know if this is becoming more frequent."
+                f"Give {p['obj']} a reassuring call or, if possible, pop in for a visit. "
+                f"Let {p['pos']} doctor know if this is becoming more frequent."
             ),
             "fall": (
-                "Call her immediately to confirm she is safe. "
-                "If you can't reach her, contact her caregiver or a neighbour right away."
+                f"Call {p['obj']} immediately to confirm {p['sub']} is safe. "
+                f"If you can't reach {p['obj']}, contact {p['pos']} caregiver or a neighbour right away."
             ),
             "emergency": (
-                "Call her immediately. If you can't reach her, contact emergency services or her on-site caregiver."
+                f"Call {p['obj']} immediately. If you can't reach {p['obj']}, contact emergency services or {p['pos']} on-site caregiver."
             ),
             "cognitive_decline": (
-                "Bring this up at her next doctor's appointment — mention the dates and what you noticed."
+                f"Bring this up at {p['pos']} next doctor's appointment — mention the dates and what you noticed."
             ),
             "social_connection": (
-                "She's missing you. Give her a call or plan a visit soon — even just 10 minutes together means a lot."
+                f"{p['Sub']}'s missing you. Give {p['obj']} a call or plan a visit soon — even just 10 minutes together means a lot."
             ),
         }
         return actions.get(
             alert_type,
-            "Give her a call to check in, and mention this to her doctor if it keeps happening."
+            f"Give {p['obj']} a call to check in, and mention this to {p['pos']} doctor if it keeps happening."
         )
     
     async def create_realtime_alert(

@@ -27,7 +27,7 @@ const METRICS: {
       key: 'vocabulary_diversity',
       baseline: 0.63,
       higherIsBetter: true,
-      description: 'How wide a range of words she used in conversation.',
+      description: 'How wide a range of words used in conversation.',
       helperText: 'Higher is generally better here.',
     },
     {
@@ -48,7 +48,7 @@ const METRICS: {
       key: 'word_finding_pauses',
       baseline: 1.5,
       higherIsBetter: false,
-      description: 'How frequently she paused to search for words.',
+      description: 'How frequently pauses occurred while searching for words.',
       helperText: 'Lower is better; more pauses can signal strain.',
     },
   ]
