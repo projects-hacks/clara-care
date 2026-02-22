@@ -156,7 +156,8 @@ class CognitivePipeline:
                 alerts = await self.alert_engine.check_and_alert(
                     patient_id,
                     metrics,
-                    deviations
+                    deviations,
+                    analysis=analysis
                 )
         
         # Step 6: Generate wellness digest

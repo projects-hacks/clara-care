@@ -32,11 +32,15 @@ class DeepgramVoiceAgent:
         self.function_handler = FunctionHandler(patient_id, cognitive_pipeline)
         self.data_store = data_store
         self._listen_task: Optional[asyncio.Task] = None
-        
+
         # Callbacks for audio output
         self.on_audio_output: Optional[Callable[[bytes], None]] = None
         self.on_transcript: Optional[Callable[[str, str], None]] = None  # (speaker, text)
         self.on_error: Optional[Callable[[str], None]] = None
+        
+        # Task 3.5: Speaking state tracking for safe injection queue
+        self.agent_is_speaking = False
+        self._on_agent_silence: Optional[Callable[[], None]] = None
         
     async def connect(self) -> bool:
         """
@@ -224,9 +228,24 @@ class DeepgramVoiceAgent:
             
         elif msg_type == "AgentStartedSpeaking":
             logger.debug("Agent started speaking")
-            
+            self.agent_is_speaking = True
+
         elif msg_type == "AgentStoppedSpeaking":
             logger.debug("Agent stopped speaking")
+            self.agent_is_speaking = False
+            # Drain any queued injections now that Clara is silent
+            if self._on_agent_silence:
+                try:
+                    # Call the silence callback (which drains the injection queue)
+                    if asyncio.iscoroutinefunction(self._on_agent_silence):
+                        await self._on_agent_silence()
+                    else:
+                        self._on_agent_silence()
+                except Exception as e:
+                    logger.warning(f"Silence callback failed: {e}")
+
+        elif msg_type == "InjectionRefused":
+            logger.debug(f"Injection refused (Clara was speaking) — will retry on silence")
             
         elif msg_type == "Transcript":
             # Conversation transcript
@@ -379,15 +398,17 @@ class DeepgramVoiceAgent:
         self,
         on_audio_output: Optional[Callable[[bytes], None]] = None,
         on_transcript: Optional[Callable[[str, str], None]] = None,
-        on_error: Optional[Callable[[str], None]] = None
+        on_error: Optional[Callable[[str], None]] = None,
+        on_agent_silence: Optional[Callable[[], None]] = None
     ):
         """
         Set callback functions for handling agent output
-        
+
         Args:
             on_audio_output: Called when Clara speaks (audio bytes)
             on_transcript: Called when transcript is available (speaker, text)
             on_error: Called when an error occurs (error message)
+            on_agent_silence: Called when Clara stops speaking (for draining injection queue)
         """
         if on_audio_output:
             self.on_audio_output = on_audio_output
@@ -395,6 +416,8 @@ class DeepgramVoiceAgent:
             self.on_transcript = on_transcript
         if on_error:
             self.on_error = on_error
+        if on_agent_silence:
+            self._on_agent_silence = on_agent_silence
 
 
 class AgentSessionManager:

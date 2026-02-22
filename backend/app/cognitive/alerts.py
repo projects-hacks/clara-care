@@ -32,16 +32,20 @@ class AlertEngine:
         self,
         patient_id: str,
         metrics: dict,
-        deviations: list[dict]
+        deviations: list[dict],
+        analysis: dict | None = None,
     ) -> list[dict]:
         """
         Check deviations and generate alerts if thresholds are met.
         De-duplicates: skips if an unacknowledged alert already exists
         for the same alert_type. Upgrades severity if new is worse.
+        
+        Args:
+            analysis: Optional dict with mood, topics, safety_flags, patient_quotes from post-call analyzer
         """
         if not deviations:
             return []
-        
+
         # Get patient's consecutive trigger threshold
         patient = await self.data_store.get_patient(patient_id)
         consecutive_trigger = patient.get("cognitive_thresholds", {}).get(
@@ -51,14 +55,14 @@ class AlertEngine:
         # Derive pronouns from patient name
         pname = patient.get("preferred_name") or patient.get("name") or "Patient"
         self._p = get_pronouns(pname)
-        
+
         # Fetch existing unacknowledged alerts for dedup
         existing_alerts = await self.data_store.get_alerts(patient_id, limit=50)
         active_by_type = {}
         for a in existing_alerts:
             if not a.get("acknowledged"):
                 active_by_type[a.get("alert_type")] = a
-        
+
         # Map metric names → alert types
         alert_type_map = {
             "vocabulary_diversity": "vocabulary_shrinkage",
@@ -67,14 +71,14 @@ class AlertEngine:
             "word_finding_pauses": "word_finding_difficulty",
             "response_latency": "response_delay"
         }
-        
+
         alerts_created = []
-        
+
         for deviation in deviations:
             # Only alert if consecutive count meets threshold
             if deviation["consecutive_count"] >= consecutive_trigger:
                 a_type = alert_type_map.get(deviation["metric_name"], "cognitive_decline")
-                
+
                 # Dedup: skip if active alert already exists for this type
                 if a_type in active_by_type:
                     existing = active_by_type[a_type]
@@ -87,25 +91,94 @@ class AlertEngine:
                     else:
                         logger.info(f"Skipping duplicate alert for {a_type} (active alert exists)")
                     continue
-                
+
                 alert = await self._create_alert_from_deviation(
                     patient_id,
                     deviation,
                     metrics
                 )
+                
+                # Enrich alert with conversation context if available
+                if analysis and alert:
+                    alert = self._enrich_alert_with_context(alert, analysis)
+                
                 alerts_created.append(alert)
-        
+
         # Dispatch notifications if service is available
         if alerts_created and self.notification_service:
             await self._dispatch_notifications(patient_id, alerts_created)
-        
+
         return alerts_created
     
     @staticmethod
     def _severity_rank(severity: str) -> int:
         """Rank severity for comparison: higher = worse."""
         return {"low": 1, "medium": 2, "high": 3}.get(severity, 0)
-    
+
+    def _enrich_alert_with_context(self, alert: dict, analysis: dict) -> dict:
+        """
+        Enrich an alert with conversation context to increase confidence
+        and provide more actionable information to families.
+        """
+        alert_type = alert.get("alert_type", "")
+        mood = analysis.get("mood", "neutral")
+        topics = analysis.get("topics", [])
+        safety_flags = analysis.get("safety_flags", [])
+        patient_quotes = analysis.get("patient_quotes", [])
+        
+        # Calculate confidence based on signal agreement
+        confidence_signals = 0
+        total_signals = 1  # The deviation itself is 1 signal
+        
+        # Signal: negative mood corroborates cognitive concern
+        if mood in ("sad", "anxious", "confused", "frustrated"):
+            confidence_signals += 1
+            total_signals += 1
+        else:
+            total_signals += 1
+        
+        # Signal: safety flags boost any alert
+        if safety_flags:
+            confidence_signals += 1
+            total_signals += 1
+        
+        # Signal: specific topic correlation
+        correlated_topics = {
+            "vocabulary_shrinkage": ["confusion", "memory", "forgetting"],
+            "coherence_drop": ["confused", "disoriented", "lost"],
+            "repetition_increase": ["memory", "forgetting", "repeat"],
+            "word_finding_difficulty": ["frustration", "confusion"],
+        }
+        relevant = correlated_topics.get(alert_type, [])
+        if any(t.lower() in " ".join(topics).lower() for t in relevant):
+            confidence_signals += 1
+            total_signals += 1
+        else:
+            total_signals += 1
+        
+        # Confidence score: base (deviation) + corroborating signals
+        confidence = round((1 + confidence_signals) / (1 + total_signals), 2)
+        confidence_label = "high" if confidence >= 0.6 else "moderate" if confidence >= 0.3 else "low"
+        
+        alert["confidence"] = confidence
+        alert["confidence_label"] = confidence_label
+        alert["conversation_mood"] = mood
+        
+        # Add a notable quote if available — makes alerts more human
+        if patient_quotes:
+            alert["patient_quote"] = patient_quotes[0]
+        
+        # Enhance description with context
+        if confidence_label == "high" and mood in ("sad", "confused"):
+            p = getattr(self, '_p', get_pronouns())
+            alert["description"] = (
+                alert.get("description", "") + 
+                f" This is backed by multiple signals — {p.get('Sub', 'the patient')} "
+                f"also seemed {mood} during the conversation."
+            )
+        
+        return alert
+
     async def _create_alert_from_deviation(
         self,
         patient_id: str,

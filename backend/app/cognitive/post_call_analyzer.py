@@ -123,14 +123,15 @@ async def analyze_transcript(
         )
     
     # 3.5 Generate rich summary via Gemini (replaces Deepgram's generic one)
-    gemini_summary = await _gemini_summarize(transcript, patient_context=ctx)
+    gemini_summary, patient_quotes = await _gemini_summarize(transcript, patient_context=ctx)
     if gemini_summary:
         dg_analysis["summary"] = gemini_summary
         logger.info("[POST_CALL] Using Gemini-generated summary instead of Deepgram")
-    
+
     # 4. Merge into unified result
     result = _merge_analysis(dg_analysis, care_analysis, transcript, patient_context=ctx)
     result["memory_inconsistency"] = memory_flags
+    result["patient_quotes"] = patient_quotes  # Attach quotes for use in alerts/digests
     
     logger.info(
         f"[POST_CALL_ANALYSIS] mood={result.get('mood')}, "
@@ -282,15 +283,16 @@ def _elder_care_analysis(transcript: str, medications: list[str]) -> dict:
     }
 
 
-async def _gemini_summarize(transcript: str, patient_context: dict | None = None) -> str:
+async def _gemini_summarize(transcript: str, patient_context: dict | None = None) -> tuple[str, list[str]]:
     """
     Generate a warm, context-aware summary using Gemini LLM.
-    Returns empty string if Gemini is unavailable or fails.
+    Returns tuple of (summary, patient_quotes).
+    Returns ("", []) if Gemini is unavailable or fails.
     """
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key or not _GEMINI_AVAILABLE:
         logger.info("[GEMINI] Skipping — no API key or google-generativeai not installed")
-        return ""
+        return "", []
 
     ctx = patient_context or {}
     pname = ctx.get("preferred_name") or ctx.get("name", "").split()[0] if ctx.get("name") else "the patient"
@@ -321,20 +323,34 @@ Write a warm, natural summary in 4-5 sentences for {pname}'s family members to r
 - Do NOT mention "Clara", "AI", "companion", "agent", "the caller", or "the host"
 - Do NOT use clinical language, jargon, or bullet points
 - Keep it under 100 words
-- If {pname} mentioned wanting to talk to family, highlight that"""
+- If {pname} mentioned wanting to talk to family, highlight that
+
+After the summary, add a new line with exactly this format:
+QUOTES: "quote one" | "quote two" | "quote three"
+Pick 2-3 short, memorable things {pname} actually said during the call — funny, sweet, or revealing moments that would make the family smile. Use their exact words from the transcript. If nothing stands out, write QUOTES: none"""
 
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-3-flash-preview")
         response = model.generate_content(prompt)
-        summary = response.text.strip()
-        # Remove any quotes the model might wrap around the summary
-        summary = summary.strip('"').strip("'").strip()
-        logger.info(f"[GEMINI] Generated summary ({len(summary)} chars): {summary[:100]}...")
-        return summary
+        raw = response.text.strip().strip('"').strip("'").strip()
+        
+        # Parse out quotes if present
+        quotes = []
+        if "QUOTES:" in raw:
+            parts = raw.split("QUOTES:", 1)
+            summary = parts[0].strip()
+            quotes_raw = parts[1].strip()
+            if quotes_raw.lower() != "none":
+                quotes = [q.strip().strip('"').strip("'") for q in quotes_raw.split("|") if q.strip()]
+        else:
+            summary = raw
+        
+        logger.info(f"[GEMINI] Generated summary ({len(summary)} chars), {len(quotes)} quotes")
+        return summary, quotes
     except Exception as exc:
         logger.warning(f"[GEMINI] Summary generation failed: {exc}")
-        return ""
+        return "", []
 
 
 def _merge_analysis(dg: dict, care: dict, transcript: str, patient_context: dict | None = None) -> dict:
