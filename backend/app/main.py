@@ -30,7 +30,8 @@ from .routes import (
     patients_router,
     conversations_router,
     wellness_router,
-    alerts_router
+    alerts_router,
+    live_status_router
 )
 from .routes import patients, conversations, wellness, alerts
 
@@ -168,6 +169,7 @@ app.include_router(patients_router)
 app.include_router(conversations_router)
 app.include_router(wellness_router)
 app.include_router(alerts_router)
+app.include_router(live_status_router)
 
 # Register data routes if available
 if HAS_DATA_ROUTES:

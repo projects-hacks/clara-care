@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { MessageSquare, Bell, Calendar, Sparkles, ChevronRight, Download } from 'lucide-react'
+import { MessageSquare, Bell, Calendar, Sparkles, ChevronRight, Download, Activity } from 'lucide-react'
 import TopBar from '@/components/TopBar'
 import CallButton from '@/components/CallButton'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -11,17 +11,21 @@ import MoodBadge from '@/components/MoodBadge'
 import ConversationCard from '@/components/ConversationCard'
 import AlertCard from '@/components/AlertCard'
 import PatientRequests from '@/components/PatientRequests'
+import LiveCallStatus from '@/components/LiveCallStatus'
+import CognitiveTrendCard from '@/components/CognitiveTrendCard'
+import { DashboardSkeleton } from '@/components/Skeleton'
 import {
   getPatient,
   getConversations,
   getAlerts,
   getLatestDigest,
   getInsights,
+  getCognitiveTrends,
   acknowledgeAlert,
   getPatientId,
   downloadReport,
 } from '@/lib/api'
-import type { Patient, Conversation, Alert, WellnessDigest, Insights } from '@/lib/api'
+import type { Patient, Conversation, Alert, WellnessDigest, Insights, CognitiveTrend } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
@@ -31,6 +35,7 @@ export default function HomePage() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [digest, setDigest] = useState<WellnessDigest | null>(null)
   const [insights, setInsights] = useState<Insights | null>(null)
+  const [cognitiveTrends, setCognitiveTrends] = useState<CognitiveTrend[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState(false)
@@ -39,18 +44,20 @@ export default function HomePage() {
     async function loadData() {
       try {
         const pid = getPatientId()
-        const [p, c, a, d, i] = await Promise.all([
+        const [p, c, a, d, i, trends] = await Promise.all([
           getPatient(pid),
           getConversations(pid),
           getAlerts(pid),
           getLatestDigest(pid),
           getInsights(pid),
+          getCognitiveTrends(pid, 14),
         ])
         setPatient(p)
         setConversations(c)
         setAlerts(a)
         setDigest(d)
         setInsights(i)
+        setCognitiveTrends(trends)
       } catch {
         setError('Failed to load dashboard data')
       } finally {
@@ -95,8 +102,8 @@ export default function HomePage() {
   if (loading) {
     return (
       <>
-        <TopBar title="ClaraCare" subtitle="Your loved one’s daily snapshot" />
-        <LoadingSpinner />
+        <TopBar title="ClaraCare" subtitle="Your loved one's daily snapshot" />
+        <DashboardSkeleton />
       </>
     )
   }
@@ -131,19 +138,26 @@ export default function HomePage() {
       />
 
       <main className="space-y-6 px-4 py-4">
+        {/* Live Call Status - WOW factor for judges */}
+        {patient && (
+          <section aria-label="Live call status">
+            <LiveCallStatus patientId={patient.id} />
+          </section>
+        )}
+
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-clara-50/80 via-white to-clara-50 p-6 shadow-sm ring-1 ring-gray-900/5" aria-label="Overview">
           <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-clara-300/10 blur-3xl"></div>
           <div className="absolute -left-10 -bottom-10 h-40 w-40 rounded-full bg-clara-200/20 blur-2xl"></div>
           <div className="flex items-start justify-between gap-3 relative z-10">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold uppercase tracking-widest text-clara-600/80">
-                Today’s Snapshot
+                Today's Snapshot
               </p>
               <h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
                 Welcome back, {patient?.name.split(' ')[0] || 'Friend'}
               </h1>
               <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
-                See Clara’s latest check-in, mood, and any alerts that may need your attention.
+                See Clara's latest check-in, mood, and any alerts that may need your attention.
               </p>
             </div>
             <button
@@ -167,6 +181,13 @@ export default function HomePage() {
               patientPhone={patient.phone_number}
               className="mt-1 shadow-sm ring-1 ring-gray-900/5 transition-all hover:shadow-md"
             />
+          </section>
+        )}
+
+        {/* Cognitive Trends Card - High-performance visualization */}
+        {cognitiveTrends.length > 0 && (
+          <section aria-label="Cognitive trends">
+            <CognitiveTrendCard trends={cognitiveTrends} period={Math.min(7, cognitiveTrends.length)} />
           </section>
         )}
 
@@ -230,7 +251,7 @@ export default function HomePage() {
         )}
 
         <section className="rounded-2xl bg-white/50 p-2" aria-label="Quick Stats">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="rounded-xl border border-gray-100/50 bg-white p-4 text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] transition-all hover:shadow-md">
               <MessageSquare className="mx-auto mb-1.5 h-6 w-6 text-clara-500" />
               <p className="text-xl font-bold text-gray-900">{conversations.length}</p>
@@ -245,6 +266,13 @@ export default function HomePage() {
               <Calendar className="mx-auto mb-1.5 h-6 w-6 text-green-500" />
               <p className="text-xl font-bold text-gray-900">{daysTracked}</p>
               <p className="mt-0.5 text-[10px] font-medium text-gray-400 uppercase tracking-wider">Days</p>
+            </div>
+            <div className="rounded-xl border border-gray-100/50 bg-white p-4 text-center shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] transition-all hover:shadow-md">
+              <Activity className="mx-auto mb-1.5 h-6 w-6 text-purple-500" />
+              <p className="text-xl font-bold text-gray-900">
+                {digest?.cognitive_score || '—'}
+              </p>
+              <p className="mt-0.5 text-[10px] font-medium text-gray-400 uppercase tracking-wider">Score</p>
             </div>
           </div>
         </section>

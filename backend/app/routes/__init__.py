@@ -7,6 +7,7 @@ from .patients import router as patients_router
 from .conversations import router as conversations_router
 from .wellness import router as wellness_router
 from .alerts import router as alerts_router
+from .live_status import router as live_status_router
 
 # Data insight and report routes
 try:
@@ -14,9 +15,10 @@ try:
     from .reports import router as reports_router
     __all__ = [
         "patients_router",
-        "conversations_router", 
+        "conversations_router",
         "wellness_router",
         "alerts_router",
+        "live_status_router",
         "insights_router",
         "reports_router"
     ]
@@ -25,5 +27,6 @@ except ImportError:
         "patients_router",
         "conversations_router",
         "wellness_router",
-        "alerts_router"
+        "alerts_router",
+        "live_status_router"
     ]
