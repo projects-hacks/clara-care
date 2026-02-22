@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const font = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body className={`${font.variable} font-sans antialiased`}>
         {children}
         <ServiceWorkerRegistration />
+        <SpeedInsights />
       </body>
     </html>
   )
