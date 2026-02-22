@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const font = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -42,6 +43,7 @@ export default function RootLayout({
         {children}
         <ServiceWorkerRegistration />
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
