@@ -26,34 +26,46 @@ function formatDuration(seconds: number): string {
 export default function LiveCallStatus({ patientId, compact = false }: LiveCallStatusProps) {
   const [callStatus, setCallStatus] = useState<CallStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lastChecked, setLastChecked] = useState<Date>(new Date())
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     let mounted = true
     let pollTimeout: NodeJS.Timeout
 
     async function fetchCallStatus() {
+      // Set refreshing flag if not initial load
+      if (!loading) setRefreshing(true)
+
       try {
-        const res = await fetch(`/api/live-status?patient_id=${patientId}`)
+        const res = await fetch(`/api/live-status?patient_id=${patientId}`, {
+          cache: 'no-store',
+        })
         if (!res.ok) throw new Error('Failed to fetch call status')
         const data = await res.json()
-        
+
         if (mounted) {
           setCallStatus(data)
+          setLastChecked(new Date())
           setLoading(false)
-          
-          // Continue polling if call is active
+          setRefreshing(false)
+
+          // Continue polling - always refresh to catch call starts/ends
           if (data.is_active) {
-            pollTimeout = setTimeout(fetchCallStatus, 2000) // Poll every 2 seconds during active call
+            // During active call: poll every 2 seconds for real-time updates
+            pollTimeout = setTimeout(fetchCallStatus, 2000)
           } else {
-            pollTimeout = setTimeout(fetchCallStatus, 10000) // Poll every 10 seconds when idle
+            // When idle: poll every 5 seconds to quickly catch incoming calls
+            pollTimeout = setTimeout(fetchCallStatus, 5000)
           }
         }
       } catch (error) {
         console.error('Error fetching call status:', error)
         if (mounted) {
           setLoading(false)
-          // Retry after 5 seconds on error
-          pollTimeout = setTimeout(fetchCallStatus, 5000)
+          setRefreshing(false)
+          // Retry after 3 seconds on error
+          pollTimeout = setTimeout(fetchCallStatus, 3000)
         }
       }
     }
@@ -89,9 +101,21 @@ export default function LiveCallStatus({ patientId, compact = false }: LiveCallS
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200">
           <PhoneOff className="h-4 w-4 text-gray-400" />
         </div>
-        <div className={compact ? "flex-1" : ""}>
-          <p className="text-xs font-medium text-gray-600">No active call</p>
-          <p className="text-[10px] text-gray-400">Clara will call at the scheduled time</p>
+        <div className={cn("flex-1", !compact && "flex items-center justify-between")}>
+          <div>
+            <p className="text-xs font-medium text-gray-600">No active call</p>
+            <p className="text-[10px] text-gray-400">Clara will call at the scheduled time</p>
+          </div>
+          {!compact && (
+            <div className="flex items-center gap-1.5">
+              {refreshing && (
+                <span className="h-1.5 w-1.5 animate-ping rounded-full bg-blue-400" />
+              )}
+              <p className="text-[9px] text-gray-400">
+                Updated {lastChecked.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -132,6 +156,14 @@ export default function LiveCallStatus({ patientId, compact = false }: LiveCallS
                 {formatDuration(callStatus.duration_sec)}
               </span>
             )}
+            <div className="flex items-center gap-1.5">
+              {refreshing && (
+                <span className="h-1.5 w-1.5 animate-ping rounded-full bg-emerald-400" />
+              )}
+              <span className="text-[9px] text-emerald-400">
+                Updated {lastChecked.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
           </div>
         </div>
       </div>
