@@ -436,7 +436,24 @@ class TwilioCallSession:
         Callback: Error occurred in Deepgram
         """
         logger.error(f"Deepgram error in call {self.call_sid}: {error_message}")
-    
+
+    def _is_viable_conversation(self, call_duration_sec: int, patient_turns: int) -> tuple[bool, str]:
+        """
+        Determine if this call had enough substance to be saved as a conversation.
+        Returns (is_viable, skip_reason).
+        """
+        MIN_DURATION_SEC = 10
+        MIN_PATIENT_TURNS = 1
+        MIN_TRANSCRIPT_LINES = 2  # At least Clara's greeting + one patient response
+        
+        if call_duration_sec < MIN_DURATION_SEC:
+            return False, f"too_short ({call_duration_sec}s < {MIN_DURATION_SEC}s)"
+        if patient_turns < MIN_PATIENT_TURNS:
+            return False, f"no_patient_speech (patient_turns={patient_turns})"
+        if len(self.conversation_transcript) < MIN_TRANSCRIPT_LINES:
+            return False, f"insufficient_transcript (lines={len(self.conversation_transcript)} < {MIN_TRANSCRIPT_LINES})"
+        return True, ""
+
     async def end(self):
         """
         End the call session.
@@ -471,9 +488,25 @@ class TwilioCallSession:
             f"total_turns={total_turns} patient_turns={patient_turns} agent_turns={agent_turns}"
         )
         
-        # Save conversation transcript before cleanup
+        # Save conversation transcript before cleanup — but only if it's a real conversation
         pipeline_result = None
-        if self.conversation_transcript and self.deepgram_agent and not self.conversation_saved:
+        is_viable, skip_reason = self._is_viable_conversation(call_duration_sec, patient_turns)
+        
+        if not is_viable:
+            logger.warning(
+                f"[CALL_TOO_SHORT] CallSid={self.call_sid} reason={skip_reason} "
+                f"duration={call_duration_sec}s patient_turns={patient_turns} "
+                f"total_turns={total_turns} — skipping analysis and save"
+            )
+        elif self.conversation_saved:
+            logger.info(
+                f"[ALREADY_SAVED] CallSid={self.call_sid} — conversation was saved during the call"
+            )
+        elif not self.deepgram_agent:
+            logger.warning(
+                f"[NO_AGENT] CallSid={self.call_sid} — no Deepgram agent, cannot save"
+            )
+        else:
             try:
                 transcript_text = "\n".join(
                     f"{t['speaker']}: {t['text']}" 
@@ -605,13 +638,7 @@ class TwilioCallSession:
                     
             except Exception as e:
                 logger.error(f"[TRANSCRIPT_SAVE_FAILED] CallSid={self.call_sid} error={e}", exc_info=True)
-        else:
-            logger.warning(
-                f"[NO_TRANSCRIPT] CallSid={self.call_sid} "
-                f"transcript_empty={not self.conversation_transcript} "
-                f"agent_exists={self.deepgram_agent is not None}"
-            )
-        
+
         # Close Deepgram session
         if self.call_sid:
             await session_manager.close_session(self.call_sid)

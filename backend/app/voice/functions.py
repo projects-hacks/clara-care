@@ -377,7 +377,24 @@ class FunctionHandler:
         detected_mood = params.get("detected_mood", "neutral")
         response_times = params.get("response_times")  # Optional timing data for analysis
         analysis = params.get("analysis")  # Post-call analysis data for richer digests
-        
+
+        # Skip non-conversations (too short to analyze meaningfully)
+        transcript_lines = [line for line in transcript.split('\n') if line.strip()]
+        patient_lines = [
+            line for line in transcript_lines 
+            if not line.strip().lower().startswith('clara:')
+        ]
+        if duration < 10 or len(patient_lines) < 1:
+            logger.warning(
+                f"[SAVE_SKIPPED] patient={patient_id} duration={duration}s "
+                f"patient_lines={len(patient_lines)} — conversation too short to save"
+            )
+            return {
+                "success": True,
+                "message": "Call was too short to analyze — not saved as a conversation",
+                "skipped": True,
+            }
+
         # If cognitive pipeline is available, run full analysis
         if self.cognitive_pipeline:
             try:
