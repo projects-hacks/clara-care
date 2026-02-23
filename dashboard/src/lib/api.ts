@@ -99,11 +99,12 @@ export interface WellnessDigest {
 
 export interface CognitiveTrend {
   timestamp: string
-  vocabulary_diversity: number
-  topic_coherence: number
+  vocabulary_diversity: number | null
+  topic_coherence: number | null
   repetition_rate: number
   word_finding_pauses: number
   response_latency: number | null
+  cognitive_score?: number | null
 }
 
 export interface Insights {

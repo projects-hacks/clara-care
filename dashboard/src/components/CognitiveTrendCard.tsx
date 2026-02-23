@@ -19,30 +19,40 @@ interface TrendDataPoint {
 }
 
 // Calculate composite cognitive score from metrics
-function calculateCognitiveScore(metrics: CognitiveTrend): number {
-  const vocab = metrics.vocabulary_diversity || 0
-  const coherence = metrics.topic_coherence || 0
-  const repetition = metrics.repetition_rate || 0
-  
-  // Weight: 40% vocab, 40% coherence, 20% repetition (inverted)
+// Prefer the backend's pre-computed score; only fall back to formula when all metrics exist
+function calculateCognitiveScore(metrics: CognitiveTrend): number | null {
+  // 1. Use backend score if available (most reliable)
+  if (metrics.cognitive_score != null && metrics.cognitive_score > 0) {
+    return metrics.cognitive_score
+  }
+
+  // 2. Fall back to formula ONLY if all key metrics are present (not null)
+  const vocab = metrics.vocabulary_diversity
+  const coherence = metrics.topic_coherence
+  const repetition = metrics.repetition_rate
+
+  if (vocab == null || coherence == null) {
+    return null  // Can't compute — skip this data point
+  }
+
   const vocabScore = vocab * 100
   const coherenceScore = coherence * 100
-  const repetitionScore = (1 - repetition) * 100
-  
+  const repetitionScore = (1 - (repetition ?? 0)) * 100
+
   return Math.round(vocabScore * 0.4 + coherenceScore * 0.4 + repetitionScore * 0.2)
 }
 
 function getTrendDirection(scores: number[]): 'improving' | 'stable' | 'declining' {
   if (scores.length < 2) return 'stable'
-  
+
   const firstHalf = scores.slice(0, Math.floor(scores.length / 2))
   const secondHalf = scores.slice(Math.floor(scores.length / 2))
-  
+
   const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length
   const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length
-  
+
   const change = secondAvg - firstAvg
-  
+
   if (change > 3) return 'improving'
   if (change < -3) return 'declining'
   return 'stable'
@@ -73,10 +83,12 @@ function getScoreBgColor(score: number): string {
 
 export default function CognitiveTrendCard({ trends, period = 7, compact = false }: CognitiveTrendCardProps) {
   const chartData: TrendDataPoint[] = useMemo(() => {
-    return trends.slice(-period).map((t) => ({
-      date: t.timestamp,
-      score: calculateCognitiveScore(t),
-    }))
+    return trends.slice(-period)
+      .map((t) => ({
+        date: t.timestamp,
+        score: calculateCognitiveScore(t),
+      }))
+      .filter((d): d is TrendDataPoint => d.score !== null)
   }, [trends, period])
 
   const scores = chartData.map(d => d.score)
@@ -117,7 +129,7 @@ export default function CognitiveTrendCard({ trends, period = 7, compact = false
               </span>
             </div>
           </div>
-          
+
           {/* Mini sparkline chart */}
           <div className="h-12 w-24">
             <ResponsiveContainer width="100%" height="100%">
@@ -155,7 +167,7 @@ export default function CognitiveTrendCard({ trends, period = 7, compact = false
             Last {period} Days
           </h3>
         </div>
-        
+
         <div className={cn(
           "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
           getScoreBgColor(latestScore)
@@ -177,15 +189,15 @@ export default function CognitiveTrendCard({ trends, period = 7, compact = false
           <AreaChart data={chartData} margin={{ top: 8, right: 0, bottom: 0, left: -20 }}>
             <defs>
               <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop 
-                  offset="0%" 
-                  stopColor={latestScore >= 70 ? '#10b981' : latestScore >= 40 ? '#f59e0b' : '#ef4444'} 
-                  stopOpacity={0.3} 
+                <stop
+                  offset="0%"
+                  stopColor={latestScore >= 70 ? '#10b981' : latestScore >= 40 ? '#f59e0b' : '#ef4444'}
+                  stopOpacity={0.3}
                 />
-                <stop 
-                  offset="100%" 
-                  stopColor={latestScore >= 70 ? '#10b981' : latestScore >= 40 ? '#f59e0b' : '#ef4444'} 
-                  stopOpacity={0.05} 
+                <stop
+                  offset="100%"
+                  stopColor={latestScore >= 70 ? '#10b981' : latestScore >= 40 ? '#f59e0b' : '#ef4444'}
+                  stopOpacity={0.05}
                 />
               </linearGradient>
             </defs>
