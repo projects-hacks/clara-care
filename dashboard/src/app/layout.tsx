@@ -4,6 +4,7 @@ import './globals.css'
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { QueryProvider } from '@/lib/query-provider'
 
 const font = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -40,7 +41,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${font.variable} font-sans antialiased`}>
-        {children}
+        <QueryProvider>
+          {children}
+        </QueryProvider>
         <ServiceWorkerRegistration />
         <Analytics />
         <SpeedInsights />
@@ -48,3 +51,4 @@ export default function RootLayout({
     </html>
   )
 }
+

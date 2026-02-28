@@ -36,13 +36,37 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ─── Safety keywords (highest priority) ────────────────────────────────────────
-SAFETY_KEYWORDS = [
-    "suicide", "suicidal", "kill myself", "end my life", "jump",
+# Tier 1: ALWAYS flag — unambiguous crisis language
+SAFETY_KEYWORDS_CRITICAL = [
+    "suicide", "suicidal", "kill myself", "end my life",
     "don't want to live", "better off dead", "hurt myself",
     "can't go on", "no reason to live", "want to die",
     "overdose", "cut myself", "harm myself", "self harm",
-    "jump from", "jump off", "end it all",
+    "end it all",
 ]
+
+# Tier 2: Context-dependent — may be sarcasm, idioms, or literal
+# These get validated against surrounding context before flagging.
+SAFETY_KEYWORDS_CONTEXTUAL = [
+    "fell", "fall", "fell down", "tripped",
+    "jump", "jumped", "jump from", "jump off",
+]
+
+# Phrases that NEGATE a contextual keyword (sarcasm, idioms, positive context)
+SAFETY_NEGATION_PHRASES = [
+    "jumped with joy", "jumped for joy", "fell asleep",
+    "fell in love", "fell for", "fall asleep",
+    "fall for it", "fell for it", "jump to conclusions",
+    "jump at the chance", "jump on it", "jumping for joy",
+    "fell over laughing", "fall into place",
+    "just kidding", "i'm joking", "joking",
+    "sarcastically", "being sarcastic",
+    "not really", "no i didn't",
+]
+
+# Keep the flat list for backward compat (used by _elder_care_analysis as a reference)
+SAFETY_KEYWORDS = SAFETY_KEYWORDS_CRITICAL + SAFETY_KEYWORDS_CONTEXTUAL
+
 
 # ─── Loneliness indicators ──────────────────────────────────────────────────────
 LONELINESS_KEYWORDS = [
@@ -500,16 +524,46 @@ def _detect_memory_inconsistency(transcript: str) -> list[str]:
 
 
 def _scan_safety_keywords(transcript: str) -> list[str]:
-    """Scan transcript for critical safety keywords."""
-    text_lower = transcript.lower()
+    """
+    Scan transcript for critical safety keywords.
+    Tier 1 (crisis) keywords always flag.
+    Tier 2 (contextual) keywords are checked against negation phrases
+    to prevent false positives from sarcasm and idioms.
+    Only flags patient speech, not Clara's.
+    """
+    # Extract only patient-side text
+    patient_text = _extract_patient_text(transcript)
+    text_lower = patient_text.lower()
     flags = []
-    for keyword in SAFETY_KEYWORDS:
+
+    # Tier 1: Always flag (unambiguous crisis language)
+    for keyword in SAFETY_KEYWORDS_CRITICAL:
         if keyword in text_lower:
             idx = text_lower.index(keyword)
-            start = max(0, idx - 40)
-            end = min(len(transcript), idx + len(keyword) + 40)
-            context = transcript[start:end].strip()
+            start = max(0, idx - 50)
+            end = min(len(patient_text), idx + len(keyword) + 50)
+            context = patient_text[start:end].strip()
             flags.append(f"Safety keyword '{keyword}': \"{context}\"")
+
+    # Tier 2: Context-dependent flags
+    for keyword in SAFETY_KEYWORDS_CONTEXTUAL:
+        if keyword in text_lower:
+            idx = text_lower.index(keyword)
+            # Extract surrounding context (100 chars each side)
+            start = max(0, idx - 100)
+            end = min(len(patient_text), idx + len(keyword) + 100)
+            surrounding = patient_text[start:end].lower()
+
+            # Skip if a negation phrase is found in the surrounding context
+            if any(neg in surrounding for neg in SAFETY_NEGATION_PHRASES):
+                logger.info(
+                    f"[SAFETY_SKIP] Contextual keyword '{keyword}' negated by context"
+                )
+                continue
+
+            context = patient_text[start:end].strip()
+            flags.append(f"Safety keyword '{keyword}': \"{context}\"")
+
     return flags
 
 

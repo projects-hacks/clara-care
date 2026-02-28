@@ -4,25 +4,11 @@ Endpoints for wellness digests and cognitive trend data
 """
 
 import re
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+
+from app.dependencies import get_data_store
 
 router = APIRouter(prefix="/api", tags=["wellness"])
-
-# Data store will be injected as dependency
-_data_store = None
-
-
-def get_data_store():
-    """Dependency to get data store"""
-    if _data_store is None:
-        raise HTTPException(status_code=500, detail="Data store not initialized")
-    return _data_store
-
-
-def set_data_store(store):
-    """Set the data store (called during app initialization)"""
-    global _data_store
-    _data_store = store
 
 
 # ---------------------------------------------------------------------------
@@ -237,17 +223,9 @@ def _normalize_digest(digest: dict) -> dict:
 async def list_wellness_digests(
     patient_id: str = Query(..., description="Patient ID"),
     limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    store=Depends(get_data_store),
 ):
-    """
-    Get paginated list of wellness digests for a patient
-
-    Query params:
-        - patient_id: Patient identifier
-        - limit: Max results (1-100, default 10)
-        - offset: Pagination offset (default 0)
-    """
-    store = get_data_store()
 
     digests = await store.get_wellness_digests(patient_id, limit=limit, offset=offset)
     digests = [_normalize_digest(d) for d in digests]
@@ -262,12 +240,13 @@ async def list_wellness_digests(
 
 
 @router.get("/wellness-digests/latest")
-async def get_latest_digest(patient_id: str = Query(..., description="Patient ID")):
+async def get_latest_digest(
+    patient_id: str = Query(..., description="Patient ID"),
+    store=Depends(get_data_store),
+):
     """
     Get the most recent wellness digest for a patient
     """
-    store = get_data_store()
-
     digest = await store.get_latest_wellness_digest(patient_id)
 
     if not digest:
@@ -279,18 +258,9 @@ async def get_latest_digest(patient_id: str = Query(..., description="Patient ID
 @router.get("/cognitive-trends")
 async def get_cognitive_trends(
     patient_id: str = Query(..., description="Patient ID"),
-    days: int = Query(30, ge=1, le=365, description="Number of days to include")
+    days: int = Query(30, ge=1, le=365, description="Number of days to include"),
+    store=Depends(get_data_store),
 ):
-    """
-    Get time-series cognitive metrics for charting
-
-    Returns data points for the last N days, suitable for Recharts or similar
-
-    Query params:
-        - patient_id: Patient identifier
-        - days: Number of days to include (1-365, default 30)
-    """
-    store = get_data_store()
 
     # Get baseline for reference
     baseline = await store.get_cognitive_baseline(patient_id)

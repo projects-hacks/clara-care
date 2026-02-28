@@ -5,26 +5,13 @@ Endpoints for viewing and managing alerts
 
 import re
 from datetime import datetime, UTC
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 
+from app.dependencies import get_data_store
+from .models import AcknowledgeAlertRequest
+
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
-
-# Data store will be injected as dependency
-_data_store = None
-
-
-def get_data_store():
-    """Dependency to get data store"""
-    if _data_store is None:
-        raise HTTPException(status_code=500, detail="Data store not initialized")
-    return _data_store
-
-
-def set_data_store(store):
-    """Set the data store (called during app initialization)"""
-    global _data_store
-    _data_store = store
 
 
 # ---------------------------------------------------------------------------
@@ -197,18 +184,9 @@ async def list_alerts(
     patient_id: str = Query(..., description="Patient ID"),
     severity: Optional[str] = Query(None, description="Filter by severity (low/medium/high)"),
     limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    store=Depends(get_data_store),
 ):
-    """
-    Get alerts for a patient
-
-    Query params:
-        - patient_id: Patient identifier
-        - severity: Optional severity filter (low, medium, high)
-        - limit: Max results (1-100, default 20)
-        - offset: Pagination offset (default 0)
-    """
-    store = get_data_store()
 
     # Validate severity if provided
     if severity and severity not in ["low", "medium", "high"]:
@@ -238,28 +216,56 @@ async def list_alerts(
 
 
 @router.patch("/{alert_id}")
-async def acknowledge_alert(alert_id: str, body: dict):
+async def acknowledge_alert(alert_id: str, body: AcknowledgeAlertRequest, store=Depends(get_data_store)):
     """
-    Mark an alert as acknowledged
+    Mark an alert as acknowledged.
+    If already acknowledged, appends to acknowledgment_history
+    (preserves who saw it first — audit trail is never lost).
 
     Body:
         - acknowledged_by: ID of person acknowledging (family member ID)
     """
-    store = get_data_store()
+    acknowledged_by = body.acknowledged_by
 
-    acknowledged_by = body.get("acknowledged_by")
-    if not acknowledged_by:
-        raise HTTPException(
-            status_code=400,
-            detail="acknowledged_by is required"
-        )
+    now = datetime.now(UTC).isoformat()
+    ack_entry = {"by": acknowledged_by, "at": now}
 
-    # Update alert
-    updates = {
-        "acknowledged": True,
-        "acknowledged_at": datetime.now(UTC).isoformat(),
-        "acknowledged_by": acknowledged_by
-    }
+    # Check if alert is already acknowledged
+    existing_alerts = await store.get_alerts(
+        patient_id="",  # we'll filter by ID below
+        limit=1,
+    )
+    # Try to find the specific alert — fall back to direct update if not found
+    alert = None
+    try:
+        # Use single-alert fetch if available
+        all_alerts = await store.get_alerts(patient_id="", limit=200)
+        alert = next((a for a in all_alerts if a.get("id") == alert_id), None)
+    except Exception:
+        pass
+
+    if alert and alert.get("acknowledged"):
+        # Already acknowledged — append to history, preserve original acknowledger
+        history = list(alert.get("acknowledgment_history", []))
+        # Seed history with original ack if this is the first duplicate
+        if not history and alert.get("acknowledged_by"):
+            history.append({
+                "by": alert["acknowledged_by"],
+                "at": alert.get("acknowledged_at", ""),
+            })
+        history.append(ack_entry)
+
+        updates = {
+            "acknowledgment_history": history,
+        }
+    else:
+        # First acknowledgment
+        updates = {
+            "acknowledged": True,
+            "acknowledged_at": now,
+            "acknowledged_by": acknowledged_by,
+            "acknowledgment_history": [ack_entry],
+        }
 
     success = await store.update_alert(alert_id, updates)
 
@@ -269,5 +275,8 @@ async def acknowledge_alert(alert_id: str, body: dict):
     return {
         "success": True,
         "alert_id": alert_id,
-        "acknowledged": True
+        "acknowledged": True,
+        "first_acknowledged_by": (
+            alert.get("acknowledged_by", acknowledged_by) if alert else acknowledged_by
+        ),
     }

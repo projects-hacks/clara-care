@@ -102,27 +102,15 @@ async def lifespan(app: FastAPI):
         notification_service=notification_service
     )
     
-    # Store in app state for access in routes
+    # Store in app state for access in routes (via app.dependencies.get_data_store)
     app.state.data_store = data_store
     app.state.cognitive_pipeline = cognitive_pipeline
     
-    # Set data store in route modules
-    patients.set_data_store(data_store)
-    conversations.set_data_store(data_store)
-    wellness.set_data_store(data_store)
-    alerts.set_data_store(data_store)
-    
-    # Set cognitive pipeline in route modules
-    conversations.set_cognitive_pipeline(cognitive_pipeline)
-    
     # Set data store in insights and reports routes if available
     if HAS_DATA_ROUTES:
-        from .routes import insights, reports
+        from .routes import reports
         from .reports.generator import ReportGenerator
         from .reports.foxit_client import FoxitClient, FoxitPDFServicesClient
-        
-        # Initialize insights with data store
-        insights.set_data_store(data_store)
         
         # Initialize reports with report generator + PDF Services
         foxit_client = FoxitClient()
@@ -447,6 +435,6 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        reload=os.getenv("ENV", "production") != "production",
         log_level="info"
     )

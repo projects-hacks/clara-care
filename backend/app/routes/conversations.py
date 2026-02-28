@@ -4,37 +4,12 @@ Endpoints for conversation history and details
 """
 
 import re
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+
+from app.dependencies import get_data_store, get_cognitive_pipeline
+from .models import CreateConversationRequest
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
-
-# Data store and cognitive pipeline will be injected as dependencies
-_data_store = None
-_cognitive_pipeline = None
-
-
-def get_data_store():
-    """Dependency to get data store"""
-    if _data_store is None:
-        raise HTTPException(status_code=500, detail="Data store not initialized")
-    return _data_store
-
-
-def get_cognitive_pipeline():
-    """Dependency to get cognitive pipeline"""
-    return _cognitive_pipeline
-
-
-def set_data_store(store):
-    """Set the data store (called during app initialization)"""
-    global _data_store
-    _data_store = store
-
-
-def set_cognitive_pipeline(pipeline):
-    """Set the cognitive pipeline (called during app initialization)"""
-    global _cognitive_pipeline
-    _cognitive_pipeline = pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -180,14 +155,25 @@ def _clean_summary(raw: str) -> str:
 
 
 async def _normalize_conversation(conv: dict, store) -> dict:
-    """Normalize a conversation record before serving it to the frontend."""
+    """Normalize a conversation record before serving it to the frontend.
+    Fast-paths: skips regex cleaning if summary has no legacy noise patterns.
+    """
     if not conv:
         return conv
 
     summary = conv.get("summary", "")
-    clean = _clean_summary(summary)
-    
-    # Fallback: if summary is missing or empty after cleaning (e.g. it was entirely noise)
+
+    # Fast path: only run expensive regex if summary has legacy noise
+    needs_cleaning = summary and any(p.search(summary) for p in _SUMMARY_NOISE)
+
+    if needs_cleaning:
+        clean = _clean_summary(summary)
+    elif not summary:
+        clean = ""
+    else:
+        clean = summary  # already clean, skip regex
+
+    # Fallback: if summary is missing or empty after cleaning
     if not clean:
         try:
             digest = await store.get_latest_wellness_digest(conv.get("patient_id"))
@@ -217,7 +203,8 @@ async def _normalize_conversation(conv: dict, store) -> dict:
 async def list_conversations(
     patient_id: str = Query(..., description="Patient ID"),
     limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    store=Depends(get_data_store),
 ):
     """
     Get paginated list of conversations for a patient
@@ -227,8 +214,6 @@ async def list_conversations(
         - limit: Max results (1-100, default 10)
         - offset: Pagination offset (default 0)
     """
-    store = get_data_store()
-
     conversations = await store.get_conversations(patient_id, limit=limit, offset=offset)
     normalized_convs = []
     for c in conversations:
@@ -244,7 +229,10 @@ async def list_conversations(
 
 
 @router.get("/{conversation_id}")
-async def get_conversation(conversation_id: str):
+async def get_conversation(
+    conversation_id: str,
+    store=Depends(get_data_store),
+):
     """
     Get full conversation details by ID
 
@@ -254,8 +242,6 @@ async def get_conversation(conversation_id: str):
         - Summary and mood
         - Timestamp and duration
     """
-    store = get_data_store()
-
     conversation = await store.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -264,44 +250,29 @@ async def get_conversation(conversation_id: str):
 
 
 @router.post("")
-async def create_conversation(conversation: dict):
+async def create_conversation(
+    conversation: CreateConversationRequest,
+    store=Depends(get_data_store),
+    pipeline=Depends(get_cognitive_pipeline),
+):
     """
-    Create a new conversation record
+    Create a new conversation record.
+    Validated and sanitized via Pydantic model.
 
-    Body: Conversation object with transcript, metrics, etc.
     If cognitive pipeline is available, will run full analysis.
-
-    Required fields:
-        - patient_id
-        - transcript
-        - duration
-    Optional fields:
-        - summary
-        - detected_mood
-        - response_times
     """
-    store = get_data_store()
-    pipeline = get_cognitive_pipeline()
-
-    # Validate required fields
-    required_fields = ["patient_id", "transcript", "duration"]
-    for field in required_fields:
-        if field not in conversation:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Missing required field: {field}"
-            )
+    conv_data = conversation.model_dump()
 
     # If cognitive pipeline is available, run full analysis
     if pipeline:
         result = await pipeline.process_conversation(
-            patient_id=conversation["patient_id"],
-            transcript=conversation["transcript"],
-            duration=conversation["duration"],
-            summary=conversation.get("summary", ""),
-            detected_mood=conversation.get("detected_mood", "neutral"),
-            response_times=conversation.get("response_times"),
-            conversation_id=conversation.get("id")
+            patient_id=conv_data["patient_id"],
+            transcript=conv_data["transcript"],
+            duration=conv_data["duration"],
+            summary=conv_data.get("summary", ""),
+            detected_mood=conv_data.get("detected_mood", "neutral"),
+            response_times=conv_data.get("response_times"),
+            conversation_id=conv_data.get("id")
         )
 
         if result.get("success"):
@@ -318,10 +289,11 @@ async def create_conversation(conversation: dict):
             )
     else:
         # Fallback: just save raw conversation (no cognitive analysis)
-        conversation_id = await store.save_conversation(conversation)
+        conversation_id = await store.save_conversation(conv_data)
 
         return {
             "success": True,
             "conversation_id": conversation_id,
             "note": "Saved without cognitive analysis (pipeline not available)"
         }
+

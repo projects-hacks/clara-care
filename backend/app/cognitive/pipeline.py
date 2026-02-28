@@ -123,58 +123,90 @@ class CognitivePipeline:
             })
         }
         
+        # Clean summary at save time (avoid per-GET regex processing)
+        try:
+            from app.routes.conversations import _clean_summary
+            conversation["summary"] = _clean_summary(summary)
+        except ImportError:
+            pass  # graceful fallback if conversations module not yet loaded
+        
         await self.data_store.save_conversation(conversation)
         logger.info(f"Conversation saved: {conversation_id}")
         
-        # Step 3: Check if baseline exists, establish if ready
-        baseline = await self.data_store.get_cognitive_baseline(patient_id)
-        
-        if not baseline or not baseline.get("established"):
-            # Check if we have enough conversations to establish baseline
-            if await self.baseline_tracker.check_baseline_ready(patient_id):
-                logger.info("Sufficient conversations for baseline. Establishing...")
-                baseline = await self.baseline_tracker.establish_baseline(patient_id)
-            else:
-                logger.info("Baseline not ready yet (need 7 conversations)")
-                baseline = None
-        
-        # Step 4: Compare to baseline and detect deviations
+        # Steps 3-7 are wrapped in try/except for partial-failure safety.
+        # If any step fails, the conversation (already saved) is not lost.
+        saved_artifacts = ["conversation"]
         deviations = []
         alerts = []
+        digest = None
+        baseline = None
         
-        if baseline and baseline.get("established"):
-            logger.info("Step 2: Comparing to baseline...")
-            deviations = await self.baseline_tracker.compare_to_baseline(
-                patient_id,
-                metrics,
-                baseline
-            )
+        try:
+            # Step 3: Check if baseline exists, establish if ready
+            baseline = await self.data_store.get_cognitive_baseline(patient_id)
             
-            # Step 5: Generate alerts if deviations are significant
-            if deviations:
-                logger.info(f"Step 3: Checking for alerts ({len(deviations)} deviations)...")
-                alerts = await self.alert_engine.check_and_alert(
+            if not baseline or not baseline.get("established"):
+                # Check if we have enough conversations to establish baseline
+                if await self.baseline_tracker.check_baseline_ready(patient_id):
+                    logger.info("Sufficient conversations for baseline. Establishing...")
+                    baseline = await self.baseline_tracker.establish_baseline(patient_id)
+                else:
+                    logger.info("Baseline not ready yet (need 7 conversations)")
+                    baseline = None
+            
+            # Step 4: Compare to baseline and detect deviations
+            if baseline and baseline.get("established"):
+                logger.info("Step 2: Comparing to baseline...")
+                deviations = await self.baseline_tracker.compare_to_baseline(
                     patient_id,
                     metrics,
-                    deviations,
-                    analysis=analysis
+                    baseline
                 )
+                
+                # Step 5: Generate alerts if deviations are significant
+                if deviations:
+                    logger.info(f"Step 3: Checking for alerts ({len(deviations)} deviations)...")
+                    alerts = await self.alert_engine.check_and_alert(
+                        patient_id,
+                        metrics,
+                        deviations,
+                        analysis=analysis
+                    )
+            
+            # Step 6: Generate wellness digest
+            logger.info("Step 4: Generating wellness digest...")
+            digest = await self._generate_wellness_digest(
+                patient_id,
+                conversation_id,
+                metrics,
+                summary,
+                detected_mood,
+                baseline,
+                analysis
+            )
+            saved_artifacts.append("digest")
+            
+            # Step 7: Send daily digest email (if enabled)
+            if digest and self.notification_service:
+                await self._send_digest_notification(patient_id, digest)
         
-        # Step 6: Generate wellness digest
-        logger.info("Step 4: Generating wellness digest...")
-        digest = await self._generate_wellness_digest(
-            patient_id,
-            conversation_id,
-            metrics,
-            summary,
-            detected_mood,
-            baseline,
-            analysis
-        )
-        
-        # Step 7: Send daily digest email (if enabled)
-        if digest and self.notification_service:
-            await self._send_digest_notification(patient_id, digest)
+        except Exception as e:
+            logger.error(
+                f"[PIPELINE_PARTIAL_FAILURE] patient={patient_id} "
+                f"conversation={conversation_id} saved={saved_artifacts} error={e}",
+                exc_info=True,
+            )
+            # The conversation is already saved — don't lose it.
+            return {
+                "success": True,
+                "partial": True,
+                "conversation_id": conversation_id,
+                "error": f"Pipeline partially completed ({', '.join(saved_artifacts)} saved). Error: {str(e)}",
+                "cognitive_score": None,
+                "cognitive_trend": None,
+                "baseline_established": bool(baseline and baseline.get("established")),
+                "alerts_generated": len(alerts),
+            }
         
         logger.info(f"Pipeline complete for {patient_id}. "
                    f"Metrics: ✓, Baseline: {'✓' if baseline else '⏳'}, "

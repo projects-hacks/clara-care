@@ -15,6 +15,9 @@ import httpx
 from fastapi import WebSocket, WebSocketDisconnect
 
 from .agent import session_manager, DeepgramVoiceAgent
+from .topic_tracker import TopicTracker
+from .injection_queue import InjectionQueue
+from .mid_call_analyzer import MidCallAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -110,20 +113,12 @@ class TwilioCallSession:
 
         # In-call context memory
         self._patient_turn_count = 0
-        self._topics_discussed: list[str] = []
         self._context_inject_interval = 10  # Inject every N patient turns
 
-        # Mid-call sentiment tracking
-        self._last_sentiment: str = "neutral"
-        self._sentiment_history: list[str] = []
-        self._sentiment_check_interval = 5  # Check every N patient turns
-        self._sentiment_task: Optional[asyncio.Task] = None
-
-        # Safe injection queue (drains during silence — handles InjectionRefused from Deepgram)
-        self._injection_queue: list[str] = []
-
-        # Reusable HTTP client for mid-call sentiment analysis
-        self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=10.0)
+        # Collaborator classes for tracking state
+        self._topic_tracker = TopicTracker()
+        self._injection_queue = InjectionQueue()
+        self._midcall_analyzer = MidCallAnalyzer()
         
     async def start(self) -> bool:
         """
@@ -243,20 +238,8 @@ class TwilioCallSession:
         if speaker.lower() != "clara":
             self._patient_turn_count += 1
 
-            # Extract topic hints from what patient said (simple keyword approach)
-            text_lower = text.lower()
-            topic_keywords = {
-                "medication": ["medicine", "pill", "medication", "dose", "prescription", "metformin", "aspirin"],
-                "family": ["son", "daughter", "grandchild", "grandson", "granddaughter", "family", "husband", "wife"],
-                "health": ["doctor", "hospital", "pain", "appointment", "surgery", "therapy"],
-                "garden": ["garden", "plant", "flower", "tomato", "vegetable"],
-                "food": ["breakfast", "lunch", "dinner", "cook", "eat", "meal"],
-                "activity": ["walk", "exercise", "church", "shopping", "reading", "tv", "television"],
-                "mood": ["lonely", "happy", "sad", "worried", "scared", "bored", "tired"],
-            }
-            for topic, keywords in topic_keywords.items():
-                if any(kw in text_lower for kw in keywords) and topic not in self._topics_discussed:
-                    self._topics_discussed.append(topic)
+            # Extract topic hints from what patient said
+            self._topic_tracker.detect_topics(text)
 
             # Inject context summary every N patient turns
             if (self._patient_turn_count % self._context_inject_interval == 0
@@ -265,12 +248,12 @@ class TwilioCallSession:
                 await self._inject_conversation_state()
 
             # Run mid-call sentiment analysis every N patient turns (background, non-blocking)
-            if (self._patient_turn_count % self._sentiment_check_interval == 0
+            if (self._midcall_analyzer.should_check(self._patient_turn_count)
                     and self.deepgram_agent):
                 # Cancel any previous running analysis
-                if self._sentiment_task and not self._sentiment_task.done():
-                    self._sentiment_task.cancel()
-                self._sentiment_task = asyncio.create_task(self._run_midcall_sentiment())
+                if self._midcall_analyzer._task and not self._midcall_analyzer._task.done():
+                    self._midcall_analyzer._task.cancel()
+                self._midcall_analyzer._task = asyncio.create_task(self._run_midcall_sentiment())
 
     async def _inject_conversation_state(self):
         """Inject a conversation state summary into the LLM to prevent topic repetition."""
@@ -282,9 +265,11 @@ class TwilioCallSession:
                 f"{t['speaker']}: {t['text'][:60]}" for t in recent_3
             )
 
+            state_summary = self._topic_tracker.get_state_summary()
+
             state_msg = (
                 f"[CONVERSATION STATE — Turn {total_turns}] "
-                f"Topics covered so far: {', '.join(self._topics_discussed) if self._topics_discussed else 'general chat'}. "
+                f"{state_summary if state_summary else 'Topics covered so far: general chat. '} "
                 f"Recent exchanges: {recent_summary}. "
                 f"Do NOT revisit topics already covered. Move to something new or go deeper on the current topic."
             )
@@ -293,7 +278,7 @@ class TwilioCallSession:
             await self._queue_injection(state_msg)
             logger.info(
                 f"[CONTEXT_INJECT] CallSid={self.call_sid} turn={self._patient_turn_count} "
-                f"topics={self._topics_discussed}"
+                f"topics={self._topic_tracker.topics_discussed}"
             )
         except Exception as e:
             logger.warning(f"[CONTEXT_INJECT] Failed: {e}")
@@ -315,33 +300,33 @@ class TwilioCallSession:
                 logger.debug(f"[INJECT] Sent immediately ({len(content)} chars)")
             except Exception as e:
                 logger.warning(f"[INJECT] Send failed, queuing: {e}")
-                self._injection_queue.append(content)
+                self._injection_queue.enqueue(content)
         else:
             # Clara is talking — queue it
-            self._injection_queue.append(content)
-            logger.debug(f"[INJECT] Queued (Clara speaking), queue size={len(self._injection_queue)}")
+            self._injection_queue.enqueue(content)
+            logger.debug(f"[INJECT] Queued (Clara speaking), queue size={len(self._injection_queue._queue)}")
 
     async def _drain_injection_queue(self):
         """
         Called when Clara stops speaking. Sends all queued injections.
         Only sends the LATEST message if multiple are queued (avoid overloading).
         """
-        if not self._injection_queue:
+        if self._injection_queue.is_empty:
             return
         if not self.deepgram_agent or not self.deepgram_agent.deepgram_ws:
             self._injection_queue.clear()
             return
 
         # Take only the latest queued message (most recent context is most relevant)
-        latest = self._injection_queue[-1]
-        self._injection_queue.clear()
+        latest = self._injection_queue.drain()
 
-        try:
-            inject = {"type": "InjectAgentMessage", "content": latest}
-            await self.deepgram_agent.deepgram_ws.send(json.dumps(inject))
-            logger.info(f"[INJECT] Drained queue, sent latest ({len(latest)} chars)")
-        except Exception as e:
-            logger.warning(f"[INJECT] Drain failed: {e}")
+        if latest:
+            try:
+                inject = {"type": "InjectAgentMessage", "content": latest}
+                await self.deepgram_agent.deepgram_ws.send(json.dumps(inject))
+                logger.info(f"[INJECT] Drained queue, sent latest ({len(latest)} chars)")
+            except Exception as e:
+                logger.warning(f"[INJECT] Drain failed: {e}")
 
     async def _run_midcall_sentiment(self):
         """
@@ -349,49 +334,11 @@ class TwilioCallSession:
         Runs as fire-and-forget — does NOT block the voice pipeline.
         """
         try:
-            # Build transcript from last N turns (not full — keeps it fast)
-            recent_turns = self.conversation_transcript[-10:]
-            text = "\n".join(f"{t['speaker']}: {t['text']}" for t in recent_turns)
-
-            if len(text) < 50:
-                return  # Too short to analyze
-
-            api_key = os.environ.get("DEEPGRAM_API_KEY")
-            if not api_key:
-                return
-
-            response = await self._http_client.post(
-                "https://api.deepgram.com/v1/read",
-                params={"sentiment": "true", "language": "en"},
-                headers={
-                    "Authorization": f"Token {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={"text": text},
-            )
-            if response.status_code != 200:
-                logger.debug(f"[MIDCALL_SENTIMENT] Deepgram returned {response.status_code}")
-                return
-
-            data = response.json()
-            sentiment = (
-                data.get("results", {})
-                .get("sentiments", {})
-                .get("average", {})
-                .get("sentiment", "neutral")
-            )
-
-            prev = self._last_sentiment
-            self._last_sentiment = sentiment
-            self._sentiment_history.append(sentiment)
-
-            # Cap history to prevent unbounded growth
-            if len(self._sentiment_history) > 20:
-                self._sentiment_history = self._sentiment_history[-20:]
+            prev, sentiment = await self._midcall_analyzer.analyze_sentiment(self.conversation_transcript, self.call_sid)
 
             # Detect emotional shift
             if prev != sentiment and self.deepgram_agent and self.deepgram_agent.deepgram_ws:
-                guidance = self._get_emotional_guidance(prev, sentiment)
+                guidance = self._midcall_analyzer.get_emotional_guidance(prev, sentiment)
                 if guidance:
                     # Use injection queue to avoid InjectionRefused from Deepgram during active speech
                     await self._queue_injection(guidance)
@@ -404,32 +351,6 @@ class TwilioCallSession:
             pass
         except Exception as e:
             logger.debug(f"[MIDCALL_SENTIMENT] Analysis failed (non-fatal): {e}")
-
-    def _get_emotional_guidance(self, prev_sentiment: str, new_sentiment: str) -> str:
-        """
-        Generate emotional guidance for Clara based on detected sentiment shift.
-        Returns empty string if no guidance needed.
-        """
-        if new_sentiment == "negative" and prev_sentiment != "negative":
-            return (
-                "[EMOTIONAL CONTEXT] The patient's tone has shifted — they seem a bit down or upset now. "
-                "Be warmer and more gentle. Ask how they're feeling. Don't try to fix anything — "
-                "just listen and validate. Slow down your pace."
-            )
-        elif new_sentiment == "positive" and prev_sentiment == "negative":
-            return (
-                "[EMOTIONAL CONTEXT] Good news — the patient's mood has lifted! "
-                "Match their energy. This is a good moment to explore what made them happy."
-            )
-        elif new_sentiment == "negative" and len(self._sentiment_history) >= 3 and all(
-            s == "negative" for s in self._sentiment_history[-3:]
-        ):
-            return (
-                "[EMOTIONAL CONTEXT] The patient has been consistently low throughout this conversation. "
-                "Consider gently asking if something is bothering them, or if they'd like to talk another time. "
-                "Don't push — respect their space."
-            )
-        return ""
     
     async def _on_error(self, error_message: str):
         """
@@ -465,11 +386,7 @@ class TwilioCallSession:
         self.is_active = False
 
         # Cancel any running mid-call analysis
-        if self._sentiment_task and not self._sentiment_task.done():
-            self._sentiment_task.cancel()
-
-        # Close the reusable HTTP client
-        await self._http_client.aclose()
+        await self._midcall_analyzer.close()
 
         # Clear injection queue
         self._injection_queue.clear()
