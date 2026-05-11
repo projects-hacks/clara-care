@@ -32,7 +32,9 @@ from .routes import (
     wellness_router,
     alerts_router,
     live_status_router,
-    call_events_router
+    call_events_router,
+    auth_router,
+    onboarding_router
 )
 from .routes import patients, conversations, wellness, alerts
 
@@ -164,6 +166,10 @@ if HAS_DATA_ROUTES:
     app.include_router(insights_router)
     app.include_router(reports_router)
     logger.info("✓ Data routes registered")
+
+# Register auth and onboarding routes
+app.include_router(auth_router)
+app.include_router(onboarding_router)
 
 
 @app.get("/")

@@ -154,6 +154,59 @@ class SupabaseDataStore:
             logger.error(f"update_patient failed for {patient_id}: {exc}")
             return False
 
+    async def get_family_contacts(self, patient_id: str) -> list[dict]:
+        """Get family contacts for a patient"""
+        try:
+            resp = self.client.table("family_contacts").select("*").eq("patient_id", patient_id).execute()
+            return resp.data or []
+        except Exception as e:
+            logger.error(f"Error getting family contacts from Supabase: {e}")
+            return []
+
+    async def get_patients_for_user(self, user_id: str) -> list[dict]:
+        """Get all patients accessible by a specific user"""
+        try:
+            # First find patients where user is the creator OR a family contact
+            contacts_resp = self.client.table("family_contacts").select("patient_id").eq("user_id", user_id).execute()
+            contact_patient_ids = [c["patient_id"] for c in contacts_resp.data] if contacts_resp.data else []
+            
+            # Now fetch the patient data
+            patients_resp = self.client.table("patients").select("*").execute()
+            
+            patients = []
+            for p in (patients_resp.data or []):
+                if p.get("created_by") == user_id or p.get("id") in contact_patient_ids:
+                    # Convert to our internal dict format matching get_patient()
+                    patient_dict = {
+                        "id": p["id"],
+                        "created_by": p.get("created_by"),
+                        "name": p["name"],
+                        "preferred_name": p["preferred_name"],
+                        "age": p.get("age", 0),
+                        "phone_number": p["phone_number"],
+                        "medical_notes": p.get("medical_notes"),
+                        "preferences": {
+                            "favorite_topics": p.get("favorite_topics", []),
+                            "communication_style": p.get("communication_style", ""),
+                            "interests": p.get("interests", []),
+                            "topics_to_avoid": p.get("topics_to_avoid", [])
+                        },
+                        "cognitive_thresholds": {
+                            "deviation_threshold": float(p.get("deviation_threshold", 0.20)),
+                            "consecutive_trigger": p.get("consecutive_trigger", 3)
+                        },
+                        "call_schedule": {
+                            "preferred_time": p.get("preferred_call_time"),
+                            "timezone": p.get("timezone", "America/Los_Angeles")
+                        },
+                        "medications": []
+                    }
+                    patients.append(patient_dict)
+            return patients
+        except Exception as e:
+            logger.error(f"Error getting patients for user from Supabase: {e}")
+            return []
+
     # =========================================================================
     # CONVERSATIONS
     # =========================================================================

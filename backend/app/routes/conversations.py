@@ -7,6 +7,7 @@ import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 
 from app.dependencies import get_data_store, get_cognitive_pipeline
+from app.auth import get_current_user, verify_patient_access
 from .models import CreateConversationRequest
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -204,6 +205,7 @@ async def list_conversations(
     patient_id: str = Query(..., description="Patient ID"),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    user=Depends(get_current_user),
     store=Depends(get_data_store),
 ):
     """
@@ -214,6 +216,9 @@ async def list_conversations(
         - limit: Max results (1-100, default 10)
         - offset: Pagination offset (default 0)
     """
+    # Verify access
+    await verify_patient_access(store, user.id, patient_id)
+
     conversations = await store.get_conversations(patient_id, limit=limit, offset=offset)
     normalized_convs = []
     for c in conversations:
@@ -231,6 +236,7 @@ async def list_conversations(
 @router.get("/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
+    user=Depends(get_current_user),
     store=Depends(get_data_store),
 ):
     """
@@ -245,6 +251,9 @@ async def get_conversation(
     conversation = await store.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Verify access
+    await verify_patient_access(store, user.id, conversation.get("patient_id"))
 
     return await _normalize_conversation(conversation, store)
 

@@ -9,6 +9,8 @@ from .wellness import router as wellness_router
 from .alerts import router as alerts_router
 from .live_status import router as live_status_router
 from .call_events import router as call_events_router
+from .auth_routes import router as auth_router
+from .onboarding import router as onboarding_router
 
 # Data insight and report routes
 try:
@@ -22,7 +24,9 @@ try:
         "live_status_router",
         "call_events_router",
         "insights_router",
-        "reports_router"
+        "reports_router",
+        "auth_router",
+        "onboarding_router"
     ]
 except ImportError:
     __all__ = [
@@ -31,5 +35,7 @@ except ImportError:
         "wellness_router",
         "alerts_router",
         "live_status_router",
-        "call_events_router"
+        "call_events_router",
+        "auth_router",
+        "onboarding_router"
     ]

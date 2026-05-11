@@ -7,6 +7,7 @@ import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 
 from app.dependencies import get_data_store
+from app.auth import get_current_user, verify_patient_access
 
 router = APIRouter(prefix="/api", tags=["wellness"])
 
@@ -224,9 +225,10 @@ async def list_wellness_digests(
     patient_id: str = Query(..., description="Patient ID"),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    user=Depends(get_current_user),
     store=Depends(get_data_store),
 ):
-
+    await verify_patient_access(store, user.id, patient_id)
     digests = await store.get_wellness_digests(patient_id, limit=limit, offset=offset)
     digests = [_normalize_digest(d) for d in digests]
 
@@ -242,11 +244,13 @@ async def list_wellness_digests(
 @router.get("/wellness-digests/latest")
 async def get_latest_digest(
     patient_id: str = Query(..., description="Patient ID"),
+    user=Depends(get_current_user),
     store=Depends(get_data_store),
 ):
     """
     Get the most recent wellness digest for a patient
     """
+    await verify_patient_access(store, user.id, patient_id)
     digest = await store.get_latest_wellness_digest(patient_id)
 
     if not digest:
@@ -259,8 +263,10 @@ async def get_latest_digest(
 async def get_cognitive_trends(
     patient_id: str = Query(..., description="Patient ID"),
     days: int = Query(30, ge=1, le=365, description="Number of days to include"),
+    user=Depends(get_current_user),
     store=Depends(get_data_store),
 ):
+    await verify_patient_access(store, user.id, patient_id)
 
     # Get baseline for reference
     baseline = await store.get_cognitive_baseline(patient_id)

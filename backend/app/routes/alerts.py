@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 
 from app.dependencies import get_data_store
+from app.auth import get_current_user, verify_patient_access
 from .models import AcknowledgeAlertRequest
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -185,8 +186,11 @@ async def list_alerts(
     severity: Optional[str] = Query(None, description="Filter by severity (low/medium/high)"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    user=Depends(get_current_user),
     store=Depends(get_data_store),
 ):
+    # Verify access
+    await verify_patient_access(store, user.id, patient_id)
 
     # Validate severity if provided
     if severity and severity not in ["low", "medium", "high"]:
@@ -216,7 +220,12 @@ async def list_alerts(
 
 
 @router.patch("/{alert_id}")
-async def acknowledge_alert(alert_id: str, body: AcknowledgeAlertRequest, store=Depends(get_data_store)):
+async def acknowledge_alert(
+    alert_id: str, 
+    body: AcknowledgeAlertRequest, 
+    user=Depends(get_current_user),
+    store=Depends(get_data_store)
+):
     """
     Mark an alert as acknowledged.
     If already acknowledged, appends to acknowledgment_history
@@ -224,25 +233,39 @@ async def acknowledge_alert(alert_id: str, body: AcknowledgeAlertRequest, store=
 
     Body:
         - acknowledged_by: ID of person acknowledging (family member ID)
+        - patient_id: Optional, to verify access efficiently
     """
+    # If patient_id is not provided, we should theoretically search for it to verify access.
+    # To keep the API simple, we'll try to fetch the alert from the store using the service role,
+    # then verify access against the found patient_id.
+    
     acknowledged_by = body.acknowledged_by
 
     now = datetime.now(UTC).isoformat()
     ack_entry = {"by": acknowledged_by, "at": now}
 
     # Check if alert is already acknowledged
-    existing_alerts = await store.get_alerts(
-        patient_id="",  # we'll filter by ID below
-        limit=1,
-    )
-    # Try to find the specific alert — fall back to direct update if not found
+    # Try to find the specific alert
     alert = None
     try:
-        # Use single-alert fetch if available
-        all_alerts = await store.get_alerts(patient_id="", limit=200)
-        alert = next((a for a in all_alerts if a.get("id") == alert_id), None)
+        # We need a method to get a single alert, but for now we fetch recent alerts.
+        # If we have the SupabaseDataStore, we can just do a direct select.
+        if hasattr(store, "client"):
+            resp = store.client.table("alerts").select("*").eq("id", alert_id).execute()
+            if resp.data:
+                alert = resp.data[0]
+        else:
+            # Fallback for memory store: just fetch all and filter
+            all_alerts = await store.get_alerts(patient_id="", limit=500)
+            alert = next((a for a in all_alerts if a.get("id") == alert_id), None)
     except Exception:
         pass
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+        
+    # VERIFY ACCESS
+    await verify_patient_access(store, user.id, alert.get("patient_id"))
 
     if alert and alert.get("acknowledged"):
         # Already acknowledged — append to history, preserve original acknowledger

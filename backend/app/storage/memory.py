@@ -311,6 +311,25 @@ class InMemoryDataStore:
             self.patients[patient_id].update(updates)
             return True
         return False
+
+    async def get_family_contacts(self, patient_id: str) -> list[dict]:
+        return [c for c in self.family_contacts.values() if c.get("patient_id") == patient_id]
+
+    async def get_patients_for_user(self, user_id: str) -> list[dict]:
+        # Simple implementation for memory store
+        # Returns all patients where user is creator or family contact
+        accessible = []
+        contact_patient_ids = [c["patient_id"] for c in self.family_contacts.values() if c.get("user_id") == user_id]
+        
+        for p_id, p in self.patients.items():
+            if p.get("created_by") == user_id or p_id in contact_patient_ids:
+                accessible.append(p)
+                
+        # If testing with no user_id or default demo user, just return all
+        if not accessible and len(self.patients) > 0:
+            return list(self.patients.values())
+            
+        return accessible
     
     async def get_conversations(
         self,

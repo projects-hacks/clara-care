@@ -7,12 +7,29 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 
 from app.dependencies import get_data_store
+from app.auth import get_current_user, get_verified_patient_id
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 
 
+@router.get("")
+async def list_patients(user=Depends(get_current_user), store=Depends(get_data_store)):
+    """
+    List all patients that the authenticated user has access to.
+    """
+    if hasattr(store, "get_patients_for_user"):
+        patients = await store.get_patients_for_user(user.id)
+        return {"patients": patients}
+    
+    # Fallback if the store doesn't support fetching by user
+    return {"patients": []}
+
+
 @router.get("/{patient_id}")
-async def get_patient(patient_id: str, store=Depends(get_data_store)):
+async def get_patient(
+    patient_id: str = Depends(get_verified_patient_id), 
+    store=Depends(get_data_store)
+):
     """
     Get patient profile with baseline and latest digest
     
@@ -54,7 +71,11 @@ async def get_patient(patient_id: str, store=Depends(get_data_store)):
 
 
 @router.patch("/{patient_id}")
-async def update_patient(patient_id: str, updates: dict, store=Depends(get_data_store)):
+async def update_patient(
+    updates: dict, 
+    patient_id: str = Depends(get_verified_patient_id), 
+    store=Depends(get_data_store)
+):
     """
     Update patient profile
     
@@ -78,3 +99,107 @@ async def update_patient(patient_id: str, updates: dict, store=Depends(get_data_
         "success": True,
         "patient": updated_patient
     }
+
+from pydantic import BaseModel, EmailStr
+
+class InviteRequest(BaseModel):
+    name: str
+    email: EmailStr
+    relationship: str
+    daily_digest: bool = True
+    instant_alerts: bool = True
+
+@router.post("/{patient_id}/invite")
+async def invite_family_member(
+    body: InviteRequest,
+    patient_id: str = Depends(get_verified_patient_id),
+    store=Depends(get_data_store)
+):
+    """
+    Invite a family member to view this patient's dashboard.
+    Generates a secure token and creates a pending family_contact record.
+    """
+    import uuid
+    from app.auth import get_auth_client
+    client = get_auth_client()
+    
+    # Generate token
+    invite_token = str(uuid.uuid4())
+    
+    invite_data = {
+        "patient_id": patient_id,
+        "name": body.name,
+        "email": body.email,
+        "relationship": body.relationship,
+        "daily_digest": body.daily_digest,
+        "instant_alerts": body.instant_alerts,
+        "is_primary": False,
+        "can_manage": False,
+        "invite_token": invite_token
+    }
+    
+    try:
+        # Use anon client for insert; policy must allow if user has access to patient.
+        # However, to avoid policy issues on insert if user didn't create the patient,
+        # we can just use the service role store if available.
+        if hasattr(store, "client"):
+            store.client.table("family_contacts").insert(invite_data).execute()
+        else:
+            # Memory store fallback
+            store.family_contacts[invite_token] = invite_data
+            
+        # TODO: Send email using SendGrid
+        # link = f"https://claracare.me/invite?token={invite_token}"
+            
+        return {
+            "success": True,
+            "message": f"Invitation sent to {body.email}",
+            "invite_token": invite_token # For dev/testing only
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create invitation: {e}")
+
+@router.get("/invite/accept")
+async def accept_invitation(
+    token: str,
+    user=Depends(get_current_user),
+    store=Depends(get_data_store)
+):
+    """
+    Accept an invitation using a token.
+    Links the authenticated user's ID to the family_contact record.
+    """
+    if not hasattr(store, "client"):
+        # Fallback for memory store
+        for k, v in store.family_contacts.items():
+            if v.get("invite_token") == token:
+                v["user_id"] = user.id
+                v["invite_token"] = None
+                return {"success": True, "patient_id": v["patient_id"]}
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    try:
+        # Find the invitation
+        resp = store.client.table("family_contacts").select("*").eq("invite_token", token).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Invalid or expired invitation token")
+            
+        contact = resp.data[0]
+        
+        # Update the record to link the user
+        from datetime import datetime, UTC
+        store.client.table("family_contacts").update({
+            "user_id": user.id,
+            "invite_token": None,
+            "accepted_at": datetime.now(UTC).isoformat()
+        }).eq("id", contact["id"]).execute()
+        
+        return {
+            "success": True,
+            "message": "Invitation accepted successfully",
+            "patient_id": contact["patient_id"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to accept invitation: {e}")

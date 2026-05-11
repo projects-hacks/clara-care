@@ -6,12 +6,16 @@ Showcase endpoint - demonstrates structured content and cross-table aggregation 
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.dependencies import get_data_store
+from app.auth import get_verified_patient_id
 
 router = APIRouter(prefix="/api/patients", tags=["insights"])
 
 
 @router.get("/{patient_id}/insights")
-async def get_patient_insights(patient_id: str, store=Depends(get_data_store)):
+async def get_patient_insights(
+    patient_id: str = Depends(get_verified_patient_id), 
+    store=Depends(get_data_store)
+):
     
     # Verify patient exists
     patient = await store.get_patient(patient_id)

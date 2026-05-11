@@ -3,8 +3,10 @@ Reports API Routes
 PDF report generation endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import Response
+
+from app.auth import get_verified_patient_id
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -27,7 +29,7 @@ def set_report_generator(generator):
 
 @router.get("/{patient_id}/cognitive-report")
 async def download_cognitive_report(
-    patient_id: str,
+    patient_id: str = Depends(get_verified_patient_id),
     days: int = Query(30, ge=7, le=90, description="Number of days to include in report")
 ):
     """
