@@ -19,7 +19,7 @@ class BaselineTracker:
     def __init__(self, data_store):
         """
         Args:
-            data_store: DataStore implementation (InMemoryDataStore or SanityDataStore)
+            data_store: DataStore implementation (InMemoryDataStore or SupabaseDataStore)
         """
         self.data_store = data_store
         self.default_deviation_threshold = 0.20  # 20%

@@ -1,6 +1,6 @@
 """
 Insights API Routes
-Showcase endpoint for Sanity challenge - demonstrates structured content features
+Showcase endpoint - demonstrates structured content and cross-table aggregation features
 """
 
 from fastapi import APIRouter, HTTPException, Depends

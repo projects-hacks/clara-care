@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 # ---------------------------------------------------------------------------
 # Legacy description normalizer
 # Converts old technical alert descriptions to plain-English equivalents.
-# This runs at read-time so any alert stored in Sanity before the code
+# This runs at read-time so any alert stored in the database before the code
 # update is automatically upgraded when served to the dashboard.
 # ---------------------------------------------------------------------------
 
@@ -149,7 +149,7 @@ def _is_legacy_description(description: str) -> bool:
 def _normalize_alert(alert: dict) -> dict:
     """
     If an alert has a legacy technical description, replace it with plain English.
-    Always refreshes suggested_action from _PLAIN_ACTIONS so stale Sanity values
+    Always refreshes suggested_action from _PLAIN_ACTIONS so stale database values
     are overwritten with the latest family-member-appropriate advice.
     Returns a (possibly mutated copy of the) alert dict.
     """
@@ -166,7 +166,7 @@ def _normalize_alert(alert: dict) -> dict:
                 alert = dict(alert)  # shallow copy
             alert["description"] = plain
 
-    # Always re-derive suggested_action — overwrites any stale Sanity value
+    # Always re-derive suggested_action — overwrites any stale stored value
     fresh_action = _PLAIN_ACTIONS.get(alert_type, _DEFAULT_ACTION)
     if alert.get("suggested_action") != fresh_action:
         alert = dict(alert)

@@ -22,7 +22,7 @@ class FunctionHandler:
     
     def __init__(self, patient_id: str, cognitive_pipeline=None):
         self.patient_id = patient_id
-        self.sanity_api_url = os.getenv("SANITY_API_URL", "http://localhost:8000/api/sanity")
+        self.backend_api_url = os.getenv("SERVER_PUBLIC_URL", "http://localhost:8000") + "/api"
         self.you_api_key = os.getenv("YOUCOM_API_KEY", "")
         self.cognitive_pipeline = cognitive_pipeline
         self.youcom_client = YouComClient(api_key=self.you_api_key)
@@ -117,11 +117,11 @@ class FunctionHandler:
             except Exception as e:
                 logger.warning(f"Could not get patient from data store: {e}")
         
-        # Fallback to Sanity API
+        # Fallback to backend API
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self.sanity_api_url}/patients/{patient_id}",
+                    f"{self.backend_api_url}/patients/{patient_id}",
                     timeout=10.0
                 )
                 
@@ -140,11 +140,11 @@ class FunctionHandler:
                     
         except Exception as e:
             logger.error(f"Error getting patient context: {e}")
-            # Return default context if Sanity is not available yet
+            # Return default context if backend is not available yet
             return self._default_patient_context()
     
     def _default_patient_context(self) -> Dict[str, Any]:
-        """Return default patient context when Sanity is not connected"""
+        """Return default patient context when backend is not connected"""
         return {
             "success": True,
             "patient": {
@@ -164,7 +164,7 @@ class FunctionHandler:
                 "interests": ["music", "gardening", "family"],
                 "communication_style": "warm and patient"
             },
-            "note": "Using default context - Sanity not connected yet"
+            "note": "Using default context - backend not connected yet"
         }
     
     async def search_nostalgia(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -217,7 +217,7 @@ class FunctionHandler:
             return self._default_nostalgia_response(trigger_reason)
     
     def _default_nostalgia_response(self, trigger_reason: str) -> Dict[str, Any]:
-        """Default nostalgia response when Sanity is not available"""
+        """Default nostalgia response when search is not available"""
         return {
             "success": True,
             "content": {
@@ -290,7 +290,7 @@ class FunctionHandler:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.sanity_api_url}/medications/log",
+                    f"{self.backend_api_url}/medications/log",
                     json={
                         "patient_id": patient_id,
                         "medication_name": medication_name,
@@ -311,12 +311,12 @@ class FunctionHandler:
                     
         except Exception as e:
             logger.error(f"Error logging medication: {e}")
-            # Log locally if Sanity is not available
+            # Log locally if backend is not available
             logger.info(f"Medication log (local): {medication_name} - Taken: {taken} - Notes: {notes}")
             return {
                 "success": True,
                 "message": f"Logged medication check for {medication_name}",
-                "note": "Logged locally - Sanity not connected yet"
+                "note": "Logged locally - backend not connected yet"
             }
     
     async def trigger_alert(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -436,7 +436,7 @@ class FunctionHandler:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.sanity_api_url}/conversations",
+                    f"{self.backend_api_url}/conversations",
                     json={
                         "patient_id": patient_id,
                         "transcript": transcript,
@@ -461,15 +461,15 @@ class FunctionHandler:
                     return {
                         "success": True,
                         "message": "Conversation saved",
-                        "note": "Saved locally - Sanity not connected yet"
+                        "note": "Saved locally - backend not connected yet"
                     }
                     
         except Exception as e:
             logger.error(f"Error saving conversation: {e}")
-            # Log locally if Sanity is not available
+            # Log locally if backend is not available
             logger.info(f"Conversation saved (local): Duration={duration}s, Mood={detected_mood}, Summary={summary[:100]}")
             return {
                 "success": True,
                 "message": "Conversation saved",
-                "note": "Saved locally - Sanity not connected yet"
+                "note": "Saved locally - backend not connected yet"
             }

@@ -8,7 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-# Strip HTML tags to prevent XSS / injection into Sanity
+# Strip HTML tags to prevent XSS / injection into the database
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 

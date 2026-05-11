@@ -1,7 +1,7 @@
 """
 In-Memory Data Store Implementation
 Development/testing storage with pre-seeded Dorothy test data
-In-memory fallback when Sanity is not configured
+In-memory fallback when Supabase is not configured
 """
 
 import uuid
@@ -440,7 +440,7 @@ class InMemoryDataStore:
     async def get_patient_insights(self, patient_id: str) -> dict:
         """
         Get structured content insights for a patient.
-        Showcase for Sanity challenge: features impossible with flat files.
+        Showcase: cross-document reference and typed field aggregation insights.
         """
         # Get all conversations for the patient
         all_convs = [

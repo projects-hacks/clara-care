@@ -1,6 +1,6 @@
 """
 DataStore Protocol
-Abstract interface for data storage - allows swapping between in-memory, Sanity, or other backends
+Abstract interface for data storage - allows swapping between in-memory, Supabase, or other backends
 """
 
 from typing import Protocol, Optional
@@ -9,7 +9,7 @@ from typing import Protocol, Optional
 class DataStore(Protocol):
     """
     Protocol defining the interface for patient data storage
-    Implementations: InMemoryDataStore, SanityDataStore
+    Implementations: InMemoryDataStore, SupabaseDataStore
     """
     
     async def get_patient(self, patient_id: str) -> Optional[dict]:
@@ -192,7 +192,7 @@ class DataStore(Protocol):
         Get structured content insights for a patient.
         Leverages cross-document references and typed field aggregation.
         
-        Showcase for Sanity challenge: features impossible with flat files.
+        Showcase: cross-document reference and typed field aggregation insights.
         
         Returns:
             Dict with:

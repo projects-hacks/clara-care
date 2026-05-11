@@ -20,7 +20,7 @@ load_dotenv(dotenv_path=env_path)
 from .voice import twilio_bridge, session_manager, outbound_manager
 
 # Cognitive analysis and storage components
-from .storage import InMemoryDataStore, SanityDataStore
+from .storage import InMemoryDataStore, SupabaseDataStore
 from .cognitive.analyzer import CognitiveAnalyzer
 from .cognitive.baseline import BaselineTracker
 from .cognitive.alerts import AlertEngine
@@ -67,21 +67,19 @@ async def lifespan(app: FastAPI):
     # Initialize cognitive analysis components
     logger.info("Initializing cognitive analysis system...")
     
-    # Decide between Sanity and in-memory storage based on available credentials
-    sanity_project_id = os.getenv("SANITY_PROJECT_ID")
-    sanity_dataset = os.getenv("SANITY_DATASET")
-    sanity_token = os.getenv("SANITY_TOKEN")
+    # Decide between Supabase and in-memory storage based on available credentials
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     
-    if sanity_project_id and sanity_dataset and sanity_token:
-        logger.info("✓ Sanity credentials found - using SanityDataStore")
-        data_store = SanityDataStore(
-            project_id=sanity_project_id,
-            dataset=sanity_dataset,
-            token=sanity_token
+    if supabase_url and supabase_service_key:
+        logger.info("✓ Supabase credentials found - using SupabaseDataStore")
+        data_store = SupabaseDataStore(
+            url=supabase_url,
+            service_role_key=supabase_service_key
         )
     else:
-        logger.info("⚠ Sanity credentials not found - using InMemoryDataStore (testing mode)")
-        logger.info("  To use Sanity, set SANITY_PROJECT_ID, SANITY_DATASET, and SANITY_TOKEN")
+        logger.info("⚠ Supabase credentials not found - using InMemoryDataStore (testing mode)")
+        logger.info("  To use Supabase, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY")
         data_store = InMemoryDataStore()
     
     # Cognitive components
@@ -131,8 +129,8 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down ClaraCare backend...")
     
-    # Cleanup Sanity client if using SanityDataStore
-    if isinstance(data_store, SanityDataStore):
+    # Cleanup data store on shutdown
+    if isinstance(data_store, SupabaseDataStore):
         await data_store.close()
 
 
@@ -380,11 +378,11 @@ async def trigger_daily_checkins():
     Trigger daily check-in calls for all patients
     
     In production, this would:
-    1. Fetch patient list from Sanity
+    1. Fetch patient list from Supabase
     2. Filter patients who need check-ins today
     3. Initiate calls to each patient
     """
-    # Example patient list (in production, fetch from Sanity)
+    # Example patient list (in production, fetch from Supabase)
     demo_patients = [
         {
             "patient_id": "demo-patient",
