@@ -6,7 +6,7 @@ Handles verifying JWT tokens from Supabase Auth and enforcing access control.
 import os
 import logging
 from typing import Optional, Dict, Any
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import create_client, Client
 
@@ -110,8 +110,6 @@ async def verify_patient_access(store: Any, user_id: str, patient_id: str) -> No
         detail="You do not have access to this patient."
     )
 
-
-from fastapi import Request
 
 async def get_verified_patient_id(
     patient_id: str,

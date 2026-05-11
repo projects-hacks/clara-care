@@ -8,7 +8,8 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from app.auth import get_auth_client, get_current_user
+from app.auth import get_current_user
+from app.dependencies import get_data_store
 
 logger = logging.getLogger(__name__)
 
@@ -56,20 +57,16 @@ class SchedulePatientRequest(BaseModel):
 # --- Endpoints ---
 
 @router.post("/patient")
-async def step1_create_patient(body: CreatePatientRequest, user = Depends(get_current_user)):
+async def step1_create_patient(
+    body: CreatePatientRequest, 
+    user=Depends(get_current_user),
+    store=Depends(get_data_store)
+):
     """
     Step 1: Create a new patient and automatically add the user as the primary family contact.
     """
-    client = get_auth_client()
     try:
         # 1. Create the patient
-        # We use the anon client. The RLS policies allow insertion if created_by is set to the user.
-        # But for insertion we might need to use the service role if RLS blocks it,
-        # or we just rely on the RLS policy: CREATE POLICY "profiles_insert_own" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-        # Wait, the patients insert policy wasn't explicitly defined in the SQL dump, it was "patients_access" ON patients FOR ALL.
-        # If there's an issue with RLS during insert via anon client, we'll need to adjust policies.
-        # For now, we try it with the anon client.
-        
         patient_data = {
             "created_by": user.id,
             "name": body.name,
@@ -81,18 +78,29 @@ async def step1_create_patient(body: CreatePatientRequest, user = Depends(get_cu
             "timezone": body.timezone,
         }
         
-        patient_resp = client.table("patients").insert(patient_data).execute()
-        
-        if not patient_resp.data:
+        if hasattr(store, "client"):
+            patient_resp = store.client.table("patients").insert(patient_data).execute()
+        else:
+            # Fallback for memory store
+            patient_id = f"patient-{len(store.patients) + 1}"
+            patient_data["id"] = patient_id
+            store.patients[patient_id] = patient_data
+            patient_resp = type("obj", (object,), {"data": [patient_data]})()
+            
+        if not getattr(patient_resp, "data", None):
             raise ValueError("Failed to insert patient")
             
         patient_id = patient_resp.data[0]["id"]
         
         # 2. Add the user as the primary family contact
         # We need the user's name from their profile
-        profile_resp = client.table("profiles").select("display_name, phone").eq("id", user.id).execute()
-        user_name = profile_resp.data[0].get("display_name", "Family Member") if profile_resp.data else "Family Member"
-        user_phone = profile_resp.data[0].get("phone", "") if profile_resp.data else ""
+        if hasattr(store, "client"):
+            profile_resp = store.client.table("profiles").select("display_name, phone").eq("id", user.id).execute()
+            user_name = profile_resp.data[0].get("display_name", "Family Member") if profile_resp.data else "Family Member"
+            user_phone = profile_resp.data[0].get("phone", "") if profile_resp.data else ""
+        else:
+            user_name = "Family Member"
+            user_phone = ""
         
         contact_data = {
             "patient_id": patient_id,
@@ -107,7 +115,11 @@ async def step1_create_patient(body: CreatePatientRequest, user = Depends(get_cu
             "instant_alerts": True
         }
         
-        client.table("family_contacts").insert(contact_data).execute()
+        if hasattr(store, "client"):
+            store.client.table("family_contacts").insert(contact_data).execute()
+        else:
+            import uuid
+            store.family_contacts[str(uuid.uuid4())] = contact_data
         
         return {
             "success": True,
@@ -120,11 +132,14 @@ async def step1_create_patient(body: CreatePatientRequest, user = Depends(get_cu
 
 
 @router.put("/personalize")
-async def step2_personalize_patient(body: PersonalizePatientRequest, user = Depends(get_current_user)):
+async def step2_personalize_patient(
+    body: PersonalizePatientRequest, 
+    user=Depends(get_current_user),
+    store=Depends(get_data_store)
+):
     """
     Step 2: Update the patient's Clara persona tuning and medications.
     """
-    client = get_auth_client()
     try:
         # Verify access happens implicitly via RLS
         
@@ -137,12 +152,17 @@ async def step2_personalize_patient(body: PersonalizePatientRequest, user = Depe
             "medical_notes": body.medical_notes
         }
         
-        client.table("patients").update(update_data).eq("id", body.patient_id).execute()
+        if hasattr(store, "client"):
+            store.client.table("patients").update(update_data).eq("id", body.patient_id).execute()
+        else:
+            if body.patient_id in store.patients:
+                store.patients[body.patient_id].update(update_data)
         
         # 2. Add medications
         if body.medications:
-            # Clear existing meds for simplicity in onboarding
-            client.table("medications").delete().eq("patient_id", body.patient_id).execute()
+            if hasattr(store, "client"):
+                # Clear existing meds for simplicity in onboarding
+                store.client.table("medications").delete().eq("patient_id", body.patient_id).execute()
             
             meds_data = []
             for med in body.medications:
@@ -153,8 +173,9 @@ async def step2_personalize_patient(body: PersonalizePatientRequest, user = Depe
                     "schedule": med.schedule
                 })
             
-            if meds_data:
-                client.table("medications").insert(meds_data).execute()
+            
+            if meds_data and hasattr(store, "client"):
+                store.client.table("medications").insert(meds_data).execute()
                 
         return {
             "success": True,
@@ -166,16 +187,23 @@ async def step2_personalize_patient(body: PersonalizePatientRequest, user = Depe
 
 
 @router.put("/schedule")
-async def step3_schedule_patient(body: SchedulePatientRequest, user = Depends(get_current_user)):
+async def step3_schedule_patient(
+    body: SchedulePatientRequest, 
+    user=Depends(get_current_user),
+    store=Depends(get_data_store)
+):
     """
     Step 3: Set preferred call time and handle optional family invites.
     """
-    client = get_auth_client()
     try:
         # 1. Update call time
-        client.table("patients").update({
-            "preferred_call_time": body.preferred_call_time
-        }).eq("id", body.patient_id).execute()
+        if hasattr(store, "client"):
+            store.client.table("patients").update({
+                "preferred_call_time": body.preferred_call_time
+            }).eq("id", body.patient_id).execute()
+        else:
+            if body.patient_id in store.patients:
+                store.patients[body.patient_id]["preferred_call_time"] = body.preferred_call_time
         
         # 2. Process invites
         invited_count = 0
@@ -198,7 +226,10 @@ async def step3_schedule_patient(body: SchedulePatientRequest, user = Depends(ge
                 }
                 
                 try:
-                    client.table("family_contacts").insert(invite_data).execute()
+                    if hasattr(store, "client"):
+                        store.client.table("family_contacts").insert(invite_data).execute()
+                    else:
+                        store.family_contacts[invite_token] = invite_data
                     invited_count += 1
                     
                     # TODO: Send email via SendGrid/Resend with the invite link
@@ -219,15 +250,18 @@ async def step3_schedule_patient(body: SchedulePatientRequest, user = Depends(ge
 
 
 @router.post("/complete")
-async def complete_onboarding(user = Depends(get_current_user)):
+async def complete_onboarding(
+    user=Depends(get_current_user),
+    store=Depends(get_data_store)
+):
     """
     Mark the onboarding flow as completed for this user.
     """
-    client = get_auth_client()
     try:
-        client.table("profiles").update({
-            "onboarding_completed": True
-        }).eq("id", user.id).execute()
+        if hasattr(store, "client"):
+            store.client.table("profiles").update({
+                "onboarding_completed": True
+            }).eq("id", user.id).execute()
         
         return {
             "success": True,

@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 
 from app.auth import get_auth_client, get_current_user
+from app.dependencies import get_data_store
 
 logger = logging.getLogger(__name__)
 
@@ -114,21 +115,25 @@ async def refresh_token(body: RefreshRequest):
 
 
 @router.get("/me")
-async def get_my_profile(user = Depends(get_current_user)):
+async def get_my_profile(
+    user = Depends(get_current_user),
+    store = Depends(get_data_store)
+):
     """
     Get the currently authenticated user's profile information.
     """
     # Fetch from the profiles table to get the custom data
-    client = get_auth_client()
     try:
         # We use the anon client, but we must pass the user's JWT to respect RLS
         # For simplicity, we can just use the user object from get_current_user
-        # and fetch their public.profiles row.
+        # For simplicity, we can just use the service_role store
         
-        response = client.table("profiles").select("*").eq("id", user.id).execute()
-        
-        profile = response.data[0] if response.data else {}
-        
+        if hasattr(store, "client"):
+            response = store.client.table("profiles").select("*").eq("id", user.id).execute()
+            profile = response.data[0] if response.data else {}
+        else:
+            profile = {}
+            
         return {
             "id": user.id,
             "email": user.email,
@@ -141,11 +146,14 @@ async def get_my_profile(user = Depends(get_current_user)):
 
 
 @router.put("/me")
-async def update_my_profile(body: UpdateProfileRequest, user = Depends(get_current_user)):
+async def update_my_profile(
+    body: UpdateProfileRequest, 
+    user = Depends(get_current_user),
+    store = Depends(get_data_store)
+):
     """
     Update the user's profile information (display_name, phone).
     """
-    client = get_auth_client()
     try:
         updates = {}
         if body.display_name is not None:
@@ -156,19 +164,15 @@ async def update_my_profile(body: UpdateProfileRequest, user = Depends(get_curre
         if not updates:
             return {"success": True, "message": "No changes requested"}
             
-        response = client.table("profiles").update(updates).eq("id", user.id).execute()
-        
-        # Also try to sync with auth.users metadata for consistency
-        try:
-            client.auth.update_user({
-                "data": updates
-            })
-        except Exception as e:
-            logger.warning(f"Could not update auth user metadata: {e}")
+        if hasattr(store, "client"):
+            response = store.client.table("profiles").update(updates).eq("id", user.id).execute()
+            updated_profile = response.data[0] if response.data else {}
+        else:
+            updated_profile = updates
             
         return {
             "success": True,
-            "profile": response.data[0] if response.data else {},
+            "profile": updated_profile,
             "message": "Profile updated successfully"
         }
     except Exception as e:

@@ -151,6 +151,16 @@ class DataStore(Protocol):
         """
         ...
     
+    async def get_patients_for_user(self, user_id: str) -> list[dict]:
+        """
+        Get all patients accessible by a specific user.
+        A user has access if they created the patient or are a family contact.
+        
+        Returns:
+            List of patient dicts
+        """
+        ...
+    
     async def get_consecutive_deviations(self, patient_id: str) -> dict:
         """
         Get consecutive deviation counters for cognitive metrics

@@ -258,6 +258,9 @@ async def get_conversation(
     return await _normalize_conversation(conversation, store)
 
 
+# NOTE: This endpoint is called by the Twilio voice pipeline (machine-to-machine).
+# It is intentionally NOT protected by get_current_user.
+# TODO: Add Twilio webhook signature verification for production.
 @router.post("")
 async def create_conversation(
     conversation: CreateConversationRequest,
