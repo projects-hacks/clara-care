@@ -32,7 +32,11 @@ class CognitivePipeline:
         analyzer,
         baseline_tracker,
         alert_engine,
-        data_store,
+        patient_repo,
+        conversation_repo,
+        cognitive_repo,
+        wellness_repo,
+        contact_repo,
         notification_service=None
     ):
         """
@@ -40,13 +44,17 @@ class CognitivePipeline:
             analyzer: CognitiveAnalyzer instance
             baseline_tracker: BaselineTracker instance
             alert_engine: AlertEngine instance
-            data_store: DataStore implementation
+            various repositories replacing data_store
             notification_service: Optional EmailNotifier for sending digests
         """
         self.analyzer = analyzer
         self.baseline_tracker = baseline_tracker
         self.alert_engine = alert_engine
-        self.data_store = data_store
+        self.patients = patient_repo
+        self.conversations = conversation_repo
+        self.cognitive = cognitive_repo
+        self.wellness = wellness_repo
+        self.contacts = contact_repo
         self.notification_service = notification_service
     
     async def process_conversation(
@@ -82,7 +90,7 @@ class CognitivePipeline:
             conversation_id = f"conversation-{uuid.uuid4().hex[:8]}"
         
         # Get patient info
-        patient = await self.data_store.get_patient(patient_id)
+        patient = self.patients.get_by_id(patient_id)
         if not patient:
             logger.error(f"Patient not found: {patient_id}")
             return {"success": False, "error": "Patient not found"}
@@ -92,7 +100,7 @@ class CognitivePipeline:
         self._p = get_pronouns(patient_name)  # pronoun dict
         
         # Get recent conversation history for cross-conversation repetition detection
-        recent_convos = await self.data_store.get_conversations(patient_id=patient_id, limit=5)
+        recent_convos = self.conversations.get_for_patient(patient_id=patient_id, limit=5)
         history_transcripts = [c.get("transcript", "") for c in recent_convos if c.get("transcript")]
         
         # Step 1: Analyze conversation with NLP metrics (including cross-conversation repetition)
@@ -130,7 +138,7 @@ class CognitivePipeline:
         except ImportError:
             pass  # graceful fallback if conversations module not yet loaded
         
-        await self.data_store.save_conversation(conversation)
+        self.conversations.save(conversation)
         logger.info(f"Conversation saved: {conversation_id}")
         
         # Steps 3-7 are wrapped in try/except for partial-failure safety.
@@ -143,7 +151,7 @@ class CognitivePipeline:
         
         try:
             # Step 3: Check if baseline exists, establish if ready
-            baseline = await self.data_store.get_cognitive_baseline(patient_id)
+            baseline = self.cognitive.get_baseline(patient_id)
             
             if not baseline or not baseline.get("established"):
                 # Check if we have enough conversations to establish baseline
@@ -268,7 +276,7 @@ class CognitivePipeline:
         }
         
         # Save digest
-        await self.data_store.save_wellness_digest(digest)
+        self.wellness.save_digest(digest)
         
         return digest
     
@@ -287,7 +295,7 @@ class CognitivePipeline:
             "improving", "stable", or "declining"
         """
         # Get last 3 digests
-        recent_digests = await self.data_store.get_wellness_digests(patient_id, limit=3)
+        recent_digests = self.wellness.get_digests(patient_id, limit=3)
         
         if len(recent_digests) < 2:
             return "stable"  # Not enough data
@@ -568,7 +576,7 @@ Generate 3-5 bullet points for the "KEY HIGHLIGHTS" section. Rules:
         Send wellness digest email to family contacts
         """
         try:
-            contacts = await self.data_store.get_family_contacts(patient_id)
+            contacts = self.contacts.get_for_patient(patient_id)
             
             if contacts and self.notification_service:
                 await self.notification_service.send_daily_digest(patient_id, digest)

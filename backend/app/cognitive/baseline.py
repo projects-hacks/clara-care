@@ -16,12 +16,10 @@ class BaselineTracker:
     Tracks cognitive baselines and detects significant deviations
     """
     
-    def __init__(self, data_store):
-        """
-        Args:
-            data_store: DataStore implementation (InMemoryDataStore or SupabaseDataStore)
-        """
-        self.data_store = data_store
+    def __init__(self, patient_repo, conversation_repo, cognitive_repo):
+        self.patients = patient_repo
+        self.conversations = conversation_repo
+        self.cognitive = cognitive_repo
         self.default_deviation_threshold = 0.20  # 20%
         self.default_consecutive_trigger = 3
     
@@ -32,7 +30,7 @@ class BaselineTracker:
         Returns:
             True if 7+ conversations exist
         """
-        conversations = await self.data_store.get_conversations(patient_id, limit=7)
+        conversations = self.conversations.get_for_patient(patient_id, limit=7)
         return len(conversations) >= 7
     
     async def establish_baseline(self, patient_id: str) -> dict:
@@ -45,7 +43,7 @@ class BaselineTracker:
         logger.info(f"Establishing baseline for patient: {patient_id}")
         
         # Get first 7 conversations with metrics
-        conversations = await self.data_store.get_conversations(patient_id, limit=7)
+        conversations = self.conversations.get_for_patient(patient_id, limit=7)
         
         if len(conversations) < 7:
             logger.warning(f"Insufficient conversations ({len(conversations)}/7) for baseline")
@@ -105,7 +103,7 @@ class BaselineTracker:
             baseline["response_time_std"] = None
         
         # Save baseline
-        await self.data_store.save_cognitive_baseline(patient_id, baseline)
+        self.cognitive.save_baseline(patient_id, baseline)
         
         logger.info(f"Baseline established: TTR={baseline['vocabulary_diversity']:.3f}, "
                    f"Coherence={baseline['topic_coherence']:.3f}, "
@@ -149,14 +147,14 @@ class BaselineTracker:
             List of BaselineDeviation dicts
         """
         if baseline is None:
-            baseline = await self.data_store.get_cognitive_baseline(patient_id)
+            baseline = self.cognitive.get_baseline(patient_id)
         
         if not baseline or not baseline.get("established"):
             logger.info(f"No baseline for patient {patient_id}, skipping comparison")
             return []
         
         # Get patient's deviation threshold
-        patient = await self.data_store.get_patient(patient_id)
+        patient = self.patients.get_by_id(patient_id)
         threshold = patient.get("cognitive_thresholds", {}).get(
             "deviation_threshold",
             self.default_deviation_threshold
@@ -173,7 +171,7 @@ class BaselineTracker:
         ]
         
         # Get consecutive deviation counters
-        consecutive = await self.data_store.get_consecutive_deviations(patient_id)
+        consecutive = self.cognitive.get_deviations(patient_id)
         
         for metric_name, current, baseline_val, direction in metrics_to_check:
             # Skip if either value is None (partial metrics) or baseline is zero
@@ -216,7 +214,7 @@ class BaselineTracker:
                 consecutive[metric_name] = 0
         
         # Update consecutive deviation counters
-        await self.data_store.update_consecutive_deviations(patient_id, consecutive)
+        self.cognitive.update_deviations(patient_id, consecutive)
         
         if deviations:
             logger.warning(f"Detected {len(deviations)} baseline deviations for {patient_id}")
@@ -237,7 +235,7 @@ class BaselineTracker:
         logger.info(f"Updating rolling baseline for patient: {patient_id}")
         
         # Get last 30 conversations
-        conversations = await self.data_store.get_conversations(patient_id, limit=30)
+        conversations = self.conversations.get_for_patient(patient_id, limit=30)
         
         if len(conversations) < 10:
             logger.warning(f"Insufficient conversations ({len(conversations)}) for rolling update")
@@ -290,7 +288,7 @@ class BaselineTracker:
             baseline["response_time_std"] = None
         
         # Save updated baseline
-        await self.data_store.save_cognitive_baseline(patient_id, baseline)
+        self.cognitive.save_baseline(patient_id, baseline)
         
         logger.info(f"Rolling baseline updated with {len(metrics_list)} conversations")
         return baseline

@@ -23,17 +23,14 @@ logger = logging.getLogger(__name__)
 class ReportGenerator:
     """
     Generates cognitive health reports as PDFs
-    Combines data from Supabase with PDF generation
+    Combines data from repositories with PDF generation
     """
 
-    def __init__(self, data_store, foxit_client, pdf_services_client=None):
-        """
-        Args:
-            data_store: DataStore instance (SupabaseDataStore or InMemoryDataStore)
-            foxit_client: FoxitClient instance (Document Generation API)
-            pdf_services_client: FoxitPDFServicesClient instance (PDF Services API)
-        """
-        self.data_store = data_store
+    def __init__(self, patient_repo, conversation_repo, cognitive_repo, alert_repo, foxit_client, pdf_services_client=None):
+        self.patient_repo = patient_repo
+        self.conversation_repo = conversation_repo
+        self.cognitive_repo = cognitive_repo
+        self.alert_repo = alert_repo
         self.foxit_client = foxit_client
         self.pdf_services = pdf_services_client
 
@@ -55,22 +52,22 @@ class ReportGenerator:
         logger.info(f"Generating cognitive report for {patient_id} ({days} days)")
 
         # 1. Fetch patient data
-        patient = await self.data_store.get_patient(patient_id)
+        patient = self.patient_repo.get_by_id(patient_id)
         if not patient:
             logger.error(f"Patient not found: {patient_id}")
             return self._error_pdf("Patient not found")
 
         # 2. Fetch cognitive trends
-        trends = await self.data_store.get_cognitive_trends(patient_id, days)
+        trends = self.cognitive_repo.get_trends(patient_id, days)
 
         # 3. Fetch baseline
-        baseline = await self.data_store.get_cognitive_baseline(patient_id)
+        baseline = self.cognitive_repo.get_baseline(patient_id)
 
         # 4. Fetch recent alerts
-        alerts = await self.data_store.get_alerts(patient_id, limit=10)
+        alerts = self.alert_repo.get_for_patient(patient_id, limit=10)
 
         # 5. Fetch recent conversations
-        conversations = await self.data_store.get_conversations(patient_id, limit=10)
+        conversations = self.conversation_repo.get_for_patient(patient_id, limit=10)
 
         # 6. Calculate summary statistics
         cognitive_score = self._calculate_overall_score(trends, baseline)

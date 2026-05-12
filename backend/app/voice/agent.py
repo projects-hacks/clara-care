@@ -24,13 +24,13 @@ class DeepgramVoiceAgent:
     Handles audio streaming and function calls
     """
     
-    def __init__(self, patient_id: str, cognitive_pipeline=None, data_store=None):
+    def __init__(self, patient_id: str, cognitive_pipeline=None):
         self.patient_id = patient_id
         self.deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
         self.deepgram_ws: Optional[WebSocketClientProtocol] = None
         self.is_connected = False
         self.function_handler = FunctionHandler(patient_id, cognitive_pipeline)
-        self.data_store = data_store
+        self.cognitive_pipeline = cognitive_pipeline
         self._listen_task: Optional[asyncio.Task] = None
 
         # Callbacks for audio output
@@ -57,21 +57,21 @@ class DeepgramVoiceAgent:
             patient = None
             recent_convos = []
             try:
-                data_store = self.data_store
-                if not data_store and self.function_handler and self.function_handler.cognitive_pipeline:
-                    data_store = self.function_handler.cognitive_pipeline.data_store
+                pipeline = self.cognitive_pipeline
+                if not pipeline and self.function_handler:
+                    pipeline = self.function_handler.cognitive_pipeline
                 
-                if data_store:
-                    patient = await data_store.get_patient(self.patient_id)
+                if pipeline:
+                    patient = pipeline.patients.get_by_id(self.patient_id)
                     if patient:
-                        recent_convos = await data_store.get_conversations(
+                        recent_convos = pipeline.conversations.get_for_patient(
                             patient_id=self.patient_id, limit=3
                         )
                         logger.info(f"Fetched patient context for {patient.get('preferred_name', self.patient_id)} ({len(recent_convos)} recent convos)")
                     else:
                         logger.warning(f"Patient {self.patient_id} not found — using generic prompt")
                 else:
-                    logger.warning("No data store available — using generic prompt")
+                    logger.warning("No cognitive pipeline available — using generic prompt")
             except Exception as e:
                 logger.error(f"Error fetching patient data: {e} — using generic prompt")
             
@@ -154,30 +154,25 @@ class DeepgramVoiceAgent:
         so Clara begins the conversation already personalized.
         """
         try:
-            data_store = self.data_store
-            if not data_store:
-                # Try to get from function handler's cognitive pipeline
-                if (self.function_handler and 
-                    self.function_handler.cognitive_pipeline and 
-                    self.function_handler.cognitive_pipeline.data_store):
-                    data_store = self.function_handler.cognitive_pipeline.data_store
+            pipeline = self.cognitive_pipeline
+            if not pipeline and self.function_handler:
+                pipeline = self.function_handler.cognitive_pipeline
             
-            if not data_store:
-                logger.warning("No data store available — skipping patient context injection")
+            if not pipeline:
+                logger.warning("No cognitive pipeline available — skipping patient context injection")
                 return
             
-            patient = await data_store.get_patient(self.patient_id)
+            patient = pipeline.patients.get_by_id(self.patient_id)
             if not patient:
                 logger.warning(f"Patient {self.patient_id} not found — skipping context injection")
                 return
             
-            recent_convos = await data_store.get_conversations(
+            recent_convos = pipeline.conversations.get_for_patient(
                 patient_id=self.patient_id, limit=3
             )
             
             context_text = build_patient_context_prompt(patient, recent_convos)
             
-            # Deepgram V1: InjectAgentMessage uses "content" instead of "message"
             inject_msg = {
                 "type": "InjectAgentMessage",
                 "content": context_text
@@ -191,7 +186,6 @@ class DeepgramVoiceAgent:
             
         except Exception as e:
             logger.error(f"Error injecting patient context: {e}")
-            # Non-fatal — Clara will fall back to calling get_patient_context
     
     async def _listen_to_deepgram(self):
         """
@@ -428,7 +422,7 @@ class AgentSessionManager:
     def __init__(self):
         self.sessions: Dict[str, DeepgramVoiceAgent] = {}
     
-    async def create_session(self, session_id: str, patient_id: str, cognitive_pipeline=None, data_store=None) -> DeepgramVoiceAgent:
+    async def create_session(self, session_id: str, patient_id: str, cognitive_pipeline=None) -> DeepgramVoiceAgent:
         """
         Create a new agent session
         
@@ -436,7 +430,6 @@ class AgentSessionManager:
             session_id: Unique identifier for this call (e.g., Twilio CallSid)
             patient_id: Patient identifier
             cognitive_pipeline: Optional cognitive pipeline for real-time analysis
-            data_store: Optional data store for fetching patient context
             
         Returns:
             DeepgramVoiceAgent instance
@@ -445,11 +438,7 @@ class AgentSessionManager:
             logger.warning(f"Session {session_id} already exists, closing old session")
             await self.close_session(session_id)
         
-        # Try to get data_store from cognitive pipeline if not provided
-        if not data_store and cognitive_pipeline and hasattr(cognitive_pipeline, 'data_store'):
-            data_store = cognitive_pipeline.data_store
-        
-        agent = DeepgramVoiceAgent(patient_id, cognitive_pipeline, data_store)
+        agent = DeepgramVoiceAgent(patient_id, cognitive_pipeline)
         connected = await agent.connect()
         
         if connected:

@@ -1,8 +1,3 @@
-"""
-Pydantic request/response models for API routes.
-Provides automatic validation + input sanitization.
-"""
-
 import re
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -50,8 +45,3 @@ class CreateConversationRequest(BaseModel):
         if v and v.lower() not in allowed:
             return "neutral"  # graceful fallback
         return v.lower()
-
-
-class AcknowledgeAlertRequest(BaseModel):
-    """Validated request body for PATCH /api/alerts/{id}."""
-    acknowledged_by: str = Field(..., min_length=1, max_length=200)

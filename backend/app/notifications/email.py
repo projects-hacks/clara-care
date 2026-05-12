@@ -21,33 +21,23 @@ class EmailNotifier:
     
     def __init__(
         self,
+        patient_repo=None,
+        contact_repo=None,
         smtp_host: Optional[str] = None,
         smtp_port: Optional[int] = None,
         smtp_user: Optional[str] = None,
         smtp_password: Optional[str] = None,
         from_email: Optional[str] = None,
         dashboard_url: Optional[str] = None,
-        data_store = None
     ):
-        """
-        Initialize email notifier
-        
-        Args:
-            smtp_host: SMTP server hostname (defaults to env var SMTP_HOST)
-            smtp_port: SMTP port (defaults to env var SMTP_PORT or 587)
-            smtp_user: SMTP username (defaults to env var SMTP_USER)
-            smtp_password: SMTP password (defaults to env var SMTP_PASSWORD)
-            from_email: From email address (defaults to env var FROM_EMAIL)
-            dashboard_url: URL to family dashboard (defaults to env var DASHBOARD_URL)
-            data_store: DataStore instance for patient/contact lookups
-        """
+        self.patient_repo = patient_repo
+        self.contact_repo = contact_repo
         self.smtp_host = smtp_host or os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = smtp_port or int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = smtp_user or os.getenv("SMTP_USER", "")
         self.smtp_password = smtp_password or os.getenv("SMTP_PASSWORD", "")
         self.from_email = from_email or os.getenv("FROM_EMAIL", "clara@claracare.ai")
         self.dashboard_url = dashboard_url or os.getenv("DASHBOARD_URL", "https://claracare.ai/dashboard")
-        self.data_store = data_store
         
         # Set up Jinja2 template environment
         template_dir = Path(__file__).parent / "templates"
@@ -73,10 +63,10 @@ class EmailNotifier:
             True if sent successfully (or logged if SMTP not configured)
         """
         # Get patient and family contacts
-        patient = await self._get_patient(patient_id) if self.data_store else None
+        patient = self._get_patient(patient_id)
         patient_name = patient.get("name") if patient else patient_id
         
-        family_contacts = await self._get_family_contacts(patient_id) if self.data_store else []
+        family_contacts = self._get_family_contacts(patient_id)
         
         if not family_contacts:
             logger.warning(f"No family contacts to notify for patient {patient_id}")
@@ -142,10 +132,10 @@ class EmailNotifier:
             True if sent successfully
         """
         # Get patient and family contacts
-        patient = await self._get_patient(patient_id) if self.data_store else None
+        patient = self._get_patient(patient_id)
         patient_name = patient.get("name") if patient else patient_id
         
-        family_contacts = await self._get_family_contacts(patient_id) if self.data_store else []
+        family_contacts = self._get_family_contacts(patient_id)
         
         if not family_contacts:
             logger.warning(f"No family contacts for daily digest for patient {patient_id}")
@@ -246,21 +236,21 @@ class EmailNotifier:
             logger.error(f"SMTP error: {e}")
             raise
     
-    async def _get_patient(self, patient_id: str) -> dict:
-        """Get patient info from data store"""
-        if not self.data_store:
+    def _get_patient(self, patient_id: str) -> dict:
+        """Get patient info via repository."""
+        if not self.patient_repo:
             return {"patient_id": patient_id, "name": patient_id}
         try:
-            return await self.data_store.get_patient(patient_id) or {"patient_id": patient_id, "name": patient_id}
+            return self.patient_repo.get_by_id(patient_id) or {"patient_id": patient_id, "name": patient_id}
         except Exception:
             return {"patient_id": patient_id, "name": patient_id}
     
-    async def _get_family_contacts(self, patient_id: str) -> list:
-        """Get family contacts from data store"""
-        if not self.data_store:
+    def _get_family_contacts(self, patient_id: str) -> list:
+        """Get family contacts via repository."""
+        if not self.contact_repo:
             return []
         try:
-            return await self.data_store.get_family_contacts(patient_id) or []
+            return self.contact_repo.get_for_patient(patient_id) or []
         except Exception:
             return []
     

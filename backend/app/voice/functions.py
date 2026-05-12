@@ -74,12 +74,12 @@ class FunctionHandler:
         """
         patient_id = params.get("patient_id", self.patient_id)
         
-        # First try to get from cognitive pipeline's data store
-        if self.cognitive_pipeline and self.cognitive_pipeline.data_store:
+        # Get patient context from cognitive pipeline repos
+        if self.cognitive_pipeline:
             try:
-                patient = await self.cognitive_pipeline.data_store.get_patient(patient_id)
+                patient = self.cognitive_pipeline.patients.get_by_id(patient_id)
                 if patient:
-                    recent_convos = await self.cognitive_pipeline.data_store.get_conversations(
+                    recent_convos = self.cognitive_pipeline.conversations.get_for_patient(
                         patient_id=patient_id, 
                         limit=5
                     )
@@ -115,7 +115,7 @@ class FunctionHandler:
                         "cognitive_thresholds": patient.get("cognitive_thresholds", {})
                     }
             except Exception as e:
-                logger.warning(f"Could not get patient from data store: {e}")
+                logger.warning(f"Could not get patient from repos: {e}")
         
         # Fallback to backend API
         try:
@@ -183,8 +183,8 @@ class FunctionHandler:
             # Fallback mock patient if cognitive pipeline is missing
             birth_year = 1951 # Default
             
-            if hasattr(self, 'cognitive_pipeline') and self.cognitive_pipeline and hasattr(self.cognitive_pipeline, 'data_store'):
-                patient = await self.cognitive_pipeline.data_store.get_patient(patient_id)
+            if self.cognitive_pipeline:
+                patient = self.cognitive_pipeline.patients.get_by_id(patient_id)
                 if patient:
                     birth_year = patient.get("birth_year", 1951)
             

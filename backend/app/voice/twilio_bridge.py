@@ -495,7 +495,7 @@ class TwilioCallSession:
                 # ── LLM Post-Call Analysis ──────────────────────────────────
                 from app.cognitive.post_call_analyzer import analyze_transcript
 
-                # Fetch this patient's medication list from the data store so
+                # Fetch this patient's medication list via pipeline repos so
                 # the analyzer scans for their specific meds, not a hardcoded set.
                 patient_meds: list[str] = []
                 try:
@@ -503,9 +503,10 @@ class TwilioCallSession:
                         self.deepgram_agent
                         and self.deepgram_agent.function_handler
                         and hasattr(self.deepgram_agent.function_handler, "cognitive_pipeline")
+                        and self.deepgram_agent.function_handler.cognitive_pipeline
                     ):
-                        data_store = self.deepgram_agent.function_handler.cognitive_pipeline.data_store
-                        patient = await data_store.get_patient(self.patient_id)
+                        pipeline = self.deepgram_agent.function_handler.cognitive_pipeline
+                        patient = pipeline.patients.get_by_id(self.patient_id)
                         if patient:
                             patient_meds = [
                                 m["name"].lower()
@@ -642,12 +643,13 @@ class TwilioCallSession:
             
             # Get patient pronouns for gender-aware alert messages
             from app.cognitive.utils import get_pronouns
-            # Try to get patient name from data store
             patient_name = None
             try:
-                if self.deepgram_agent.function_handler and hasattr(self.deepgram_agent.function_handler, "cognitive_pipeline"):
-                    ds = self.deepgram_agent.function_handler.cognitive_pipeline.data_store
-                    pt = await ds.get_patient(self.patient_id)
+                pipeline = getattr(
+                    self.deepgram_agent.function_handler, "cognitive_pipeline", None
+                )
+                if pipeline:
+                    pt = pipeline.patients.get_by_id(self.patient_id)
                     patient_name = pt.get("name") if pt else None
             except Exception:
                 pass

@@ -18,13 +18,10 @@ class AlertEngine:
     Generates alerts from baseline deviations and dispatches notifications
     """
     
-    def __init__(self, data_store, notification_service=None):
-        """
-        Args:
-            data_store: DataStore implementation
-            notification_service: Optional NotificationService for dispatching alerts
-        """
-        self.data_store = data_store
+    def __init__(self, patient_repo, alert_repo, contact_repo, notification_service=None):
+        self.patients = patient_repo
+        self.alerts = alert_repo
+        self.contacts = contact_repo
         self.notification_service = notification_service
         self.default_consecutive_trigger = 2
     
@@ -47,7 +44,7 @@ class AlertEngine:
             return []
 
         # Get patient's consecutive trigger threshold
-        patient = await self.data_store.get_patient(patient_id)
+        patient = self.patients.get_by_id(patient_id)
         consecutive_trigger = patient.get("cognitive_thresholds", {}).get(
             "consecutive_trigger",
             self.default_consecutive_trigger
@@ -57,7 +54,7 @@ class AlertEngine:
         self._p = get_pronouns(pname)
 
         # Fetch existing unacknowledged alerts for dedup
-        existing_alerts = await self.data_store.get_alerts(patient_id, limit=50)
+        existing_alerts = self.alerts.get_for_patient(patient_id, limit=50)
         active_by_type = {}
         for a in existing_alerts:
             if not a.get("acknowledged"):
@@ -84,7 +81,7 @@ class AlertEngine:
                     existing = active_by_type[a_type]
                     if self._severity_rank(deviation["severity"]) > self._severity_rank(existing.get("severity", "low")):
                         # Upgrade severity on existing alert
-                        await self.data_store.update_alert(existing["id"], {
+                        self.alerts.update(existing["id"], {
                             "severity": deviation["severity"]
                         })
                         logger.info(f"Upgraded alert {existing['id']} to {deviation['severity']}")
@@ -225,7 +222,7 @@ class AlertEngine:
         }
         
         # Save to data store
-        alert_id = await self.data_store.save_alert(alert)
+        alert_id = self.alerts.save(alert)
         alert["id"] = alert_id
         
         logger.warning(f"Alert created: {alert_type} ({deviation['severity']}) for patient {patient_id}")
@@ -373,7 +370,7 @@ class AlertEngine:
         }
         
         # Save to data store
-        alert_id = await self.data_store.save_alert(alert)
+        alert_id = self.alerts.save(alert)
         alert["id"] = alert_id
         
         logger.critical(f"REALTIME ALERT: {alert_type} ({severity}) - {message}")
@@ -391,7 +388,7 @@ class AlertEngine:
         """
         try:
             # Get family contacts
-            contacts = await self.data_store.get_family_contacts(patient_id)
+            contacts = self.contacts.get_for_patient(patient_id)
             
             if not contacts:
                 logger.warning(f"No family contacts found for patient {patient_id}")
@@ -428,10 +425,10 @@ class AlertEngine:
         display_name = acknowledged_by
         try:
             # Get the alert first to find the patient
-            all_alerts = await self.data_store.get_alerts("", limit=100)
+            all_alerts = self.alerts.get_for_patient("", limit=100)
             alert_record = next((a for a in all_alerts if a.get("id") == alert_id), None)
             if alert_record:
-                patient = await self.data_store.get_patient(alert_record.get("patient_id", ""))
+                patient = self.patients.get_by_id(alert_record.get("patient_id", ""))
                 if patient:
                     for contact in patient.get("family_contacts", []):
                         if contact.get("id") == acknowledged_by:
@@ -446,7 +443,7 @@ class AlertEngine:
             "acknowledged_at": datetime.now(UTC).isoformat()
         }
         
-        success = await self.data_store.update_alert(alert_id, updates)
+        success = self.alerts.update(alert_id, updates)
         if success:
             logger.info(f"Alert {alert_id} acknowledged by {display_name}")
         return success

@@ -20,7 +20,20 @@ load_dotenv(dotenv_path=env_path)
 from .voice import twilio_bridge, session_manager, outbound_manager
 
 # Cognitive analysis and storage components
-from .storage import InMemoryDataStore, SupabaseDataStore
+from supabase import create_client
+
+from .repositories.patient_repo import PatientRepository
+from .repositories.profile_repo import ProfileRepository
+from .repositories.contact_repo import ContactRepository
+from .repositories.conversation_repo import ConversationRepository
+from .repositories.alert_repo import AlertRepository
+from .repositories.wellness_repo import WellnessRepository
+from .repositories.cognitive_repo import CognitiveRepository
+
+from .services.auth_service import AuthService
+from .services.onboarding_service import OnboardingService
+from .services.patient_service import PatientService
+from .services.invite_service import InviteService
 from .cognitive.analyzer import CognitiveAnalyzer
 from .cognitive.baseline import BaselineTracker
 from .cognitive.alerts import AlertEngine
@@ -37,7 +50,6 @@ from .routes import (
     onboarding_router,
     invite_router
 )
-from .routes import patients, conversations, wellness, alerts
 
 # Data insights, reports, and nostalgia routes
 try:
@@ -70,42 +82,64 @@ async def lifespan(app: FastAPI):
     # Initialize cognitive analysis components
     logger.info("Initializing cognitive analysis system...")
     
-    # Decide between Supabase and in-memory storage based on available credentials
+    # Create the single Supabase client
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
     
-    if supabase_url and supabase_service_key:
-        logger.info("✓ Supabase credentials found - using SupabaseDataStore")
-        data_store = SupabaseDataStore(
-            url=supabase_url,
-            service_role_key=supabase_service_key
-        )
-    else:
-        logger.info("⚠ Supabase credentials not found - using InMemoryDataStore (testing mode)")
-        logger.info("  To use Supabase, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY")
-        data_store = InMemoryDataStore()
+    if not supabase_url or not supabase_service_key or not supabase_anon_key:
+        logger.error("Missing Supabase credentials in .env")
+        raise RuntimeError("SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_ANON_KEY are required")
+        
+    service_client = create_client(supabase_url, supabase_service_key)
+    anon_client = create_client(supabase_url, supabase_anon_key)
+    
+    # Create repositories
+    patient_repo = PatientRepository(service_client)
+    profile_repo = ProfileRepository(service_client)
+    contact_repo = ContactRepository(service_client)
+    conversation_repo = ConversationRepository(service_client)
+    alert_repo = AlertRepository(service_client)
+    wellness_repo = WellnessRepository(service_client)
+    cognitive_repo = CognitiveRepository(service_client)
     
     # Cognitive components
     analyzer = CognitiveAnalyzer()
-    baseline_tracker = BaselineTracker(data_store)
+    baseline_tracker = BaselineTracker(patient_repo, conversation_repo, cognitive_repo)
     
     # Notification service
-    notification_service = EmailNotifier(data_store=data_store)
+    notification_service = EmailNotifier(patient_repo, contact_repo)
     
     # Alert engine
-    alert_engine = AlertEngine(data_store, notification_service)
+    alert_engine = AlertEngine(patient_repo, alert_repo, contact_repo, notification_service)
     
     # Cognitive pipeline orchestrator
     cognitive_pipeline = CognitivePipeline(
         analyzer=analyzer,
         baseline_tracker=baseline_tracker,
         alert_engine=alert_engine,
-        data_store=data_store,
+        patient_repo=patient_repo,
+        conversation_repo=conversation_repo,
+        cognitive_repo=cognitive_repo,
+        wellness_repo=wellness_repo,
+        contact_repo=contact_repo,
         notification_service=notification_service
     )
     
-    # Store in app state for access in routes (via app.dependencies.get_data_store)
-    app.state.data_store = data_store
+    # Create services
+    app.state.auth_service = AuthService(anon_client, profile_repo)
+    app.state.onboarding_service = OnboardingService(patient_repo, profile_repo, contact_repo)
+    app.state.patient_service = PatientService(patient_repo, contact_repo, conversation_repo, wellness_repo, cognitive_repo)
+    app.state.invite_service = InviteService(contact_repo)
+    
+    # Store repos in app state for access in routes
+    app.state.patient_repo = patient_repo
+    app.state.profile_repo = profile_repo
+    app.state.contact_repo = contact_repo
+    app.state.conversation_repo = conversation_repo
+    app.state.alert_repo = alert_repo
+    app.state.wellness_repo = wellness_repo
+    app.state.cognitive_repo = cognitive_repo
     app.state.cognitive_pipeline = cognitive_pipeline
     
     # Set data store in insights and reports routes if available
@@ -117,7 +151,7 @@ async def lifespan(app: FastAPI):
         # Initialize reports with report generator + PDF Services
         foxit_client = FoxitClient()
         pdf_services = FoxitPDFServicesClient()
-        report_gen = ReportGenerator(data_store, foxit_client, pdf_services)
+        report_gen = ReportGenerator(patient_repo, conversation_repo, cognitive_repo, alert_repo, foxit_client, pdf_services)
         reports.set_report_generator(report_gen)
         
         logger.info("✓ Data routes initialized")
@@ -133,8 +167,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down ClaraCare backend...")
     
     # Cleanup data store on shutdown
-    if isinstance(data_store, SupabaseDataStore):
-        await data_store.close()
+    # No cleanup needed for sync supabase client
 
 
 # Create FastAPI app
