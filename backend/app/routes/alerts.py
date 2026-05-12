@@ -26,7 +26,7 @@ async def list_alerts(
     contact_repo=Depends(get_contact_repo),
 ):
     # Verify access
-    await verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
+    verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
 
     # Validate severity if provided
     if severity and severity not in ["low", "medium", "high"]:
@@ -70,7 +70,7 @@ async def acknowledge_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
         
     # VERIFY ACCESS
-    await verify_patient_access(patient_repo, contact_repo, user.id, alert.get("patient_id"))
+    verify_patient_access(patient_repo, contact_repo, user.id, alert.get("patient_id"))
 
     acknowledged_by = body.acknowledged_by
     now = datetime.now(UTC).isoformat()

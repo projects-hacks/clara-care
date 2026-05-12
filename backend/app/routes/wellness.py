@@ -22,7 +22,7 @@ async def list_wellness_digests(
     patient_repo=Depends(get_patient_repo),
     contact_repo=Depends(get_contact_repo),
 ):
-    await verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
+    verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
     digests = wellness_repo.get_digests(patient_id, limit=limit, offset=offset)
     digests = [normalize_digest(d) for d in digests]
 
@@ -45,7 +45,7 @@ async def get_latest_digest(
     """
     Get the most recent wellness digest for a patient
     """
-    await verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
+    verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
     digest = wellness_repo.get_latest_digest(patient_id)
 
     if not digest:
@@ -62,7 +62,7 @@ async def get_cognitive_trends(
     patient_repo=Depends(get_patient_repo),
     contact_repo=Depends(get_contact_repo),
 ):
-    await verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
+    verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
 
     # Get baseline for reference
     baseline = cognitive_repo.get_baseline(patient_id)

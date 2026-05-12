@@ -28,7 +28,7 @@ async def list_conversations(
     Get paginated list of conversations for a patient
     """
     # Verify access
-    await verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
+    verify_patient_access(patient_repo, contact_repo, user.id, patient_id)
 
     conversations = conversation_repo.get_for_patient(patient_id, limit=limit, offset=offset)
     normalized_convs = [normalize_conversation(c) for c in conversations]
@@ -58,7 +58,7 @@ async def get_conversation(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Verify access
-    await verify_patient_access(patient_repo, contact_repo, user.id, conversation.get("patient_id"))
+    verify_patient_access(patient_repo, contact_repo, user.id, conversation.get("patient_id"))
 
     return normalize_conversation(conversation)
 
