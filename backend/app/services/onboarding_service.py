@@ -31,8 +31,8 @@ class OnboardingService:
 
         # 2. Get user info
         profile = self.profile_repo.get_by_id(user_id) or {}
-        user_name = profile.get("display_name", "Family Member")
-        user_phone = profile.get("phone", "")
+        user_name = profile.get("display_name") or "Family Member"
+        user_phone = profile.get("phone") or ""
         
         # 3. Create contact link
         contact_data = {

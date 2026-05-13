@@ -10,14 +10,13 @@ RUN apt-get update && apt-get install -y \
 
 COPY requirements.txt .
 
-# Install CPU-only PyTorch first (avoids ~2.5GB of CUDA libraries)
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+# Install uv for extremely fast package resolution and installation
+RUN pip install --no-cache-dir uv
 
-# Install remaining Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Download spaCy model
-RUN pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+# Use uv pip install which is 10-100x faster than standard pip
+RUN uv pip install --system --no-cache torch --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --system --no-cache -r requirements.txt
+RUN uv pip install --system --no-cache https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
 # ─── Production stage: lean runtime ─────────────────────────────────────────
 FROM python:3.11-slim
