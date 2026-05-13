@@ -33,17 +33,17 @@ Dorothy: Yes, my tomatoes are growing nicely."""
 
 @pytest.mark.asyncio
 async def test_extract_patient_turns_case_insensitive(analyzer):
-    """Test patient name extraction is case-sensitive"""
+    """Test patient name extraction is case-insensitive"""
     transcript = """clara: Hi there
 dorothy: Hello
 DOROTHY: How are you?"""
     
-    # Case matters - must match exactly
+    # Case should not matter - both dorothy and DOROTHY should match both lines
     turns_dorothy = analyzer._extract_patient_turns(transcript, "dorothy")
     turns_DOROTHY = analyzer._extract_patient_turns(transcript, "DOROTHY")
     
-    assert len(turns_dorothy) == 1
-    assert len(turns_DOROTHY) == 1
+    assert len(turns_dorothy) == 2
+    assert len(turns_DOROTHY) == 2
 
 
 @pytest.mark.asyncio
