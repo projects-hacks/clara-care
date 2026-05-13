@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Initialize Sentry for crash reporting
 Sentry.init({
-  dsn: 'https://deaa70b66ff1d058322dc566f38a7122@o4511385064767488.ingest.us.sentry.io/4511385074663424',
+  dsn: 'https://5ea34f7a70e498b32110582b5143df85@o4511385064767488.ingest.us.sentry.io/4511385081872384',
   tracesSampleRate: 0.3,
   profilesSampleRate: 0.1,
   debug: __DEV__, // Show Sentry logs in dev mode
