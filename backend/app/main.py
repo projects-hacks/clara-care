@@ -239,6 +239,12 @@ async def health_check():
     }
 
 
+@app.get("/sentry-debug")
+async def trigger_sentry_error():
+    """Test endpoint to verify Sentry is capturing errors. Safe to delete."""
+    division_by_zero = 1 / 0
+
+
 @app.get("/dev/status")
 async def dev_status():
     """
