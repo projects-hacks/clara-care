@@ -1,32 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import * as Sentry from '@sentry/react-native';
 import { colors, spacing, borderRadius, fontSize } from '../../theme';
 import { supabase } from '../../api/supabase';
-import apiClient from '../../api/client';
 
 export default function SettingsScreen() {
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
       Alert.alert('Error', 'Failed to log out');
-    }
-  };
-
-  const triggerMobileError = () => {
-    try {
-      throw new Error('Sentry Mobile Test Error — you can delete this!');
-    } catch (e) {
-      Sentry.captureException(e);
-      Alert.alert('✅ Sent!', 'Check Sentry dashboard for the mobile test error.');
-    }
-  };
-
-  const triggerBackendError = async () => {
-    try {
-      await apiClient.get('/sentry-debug');
-    } catch {
-      Alert.alert('✅ Sent!', 'Backend threw a test error. Check Sentry for it.');
     }
   };
 
@@ -41,18 +22,6 @@ export default function SettingsScreen() {
           <Text style={styles.rowText}>Notifications</Text>
         </TouchableOpacity>
       </View>
-
-      {__DEV__ && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Developer</Text>
-          <TouchableOpacity style={styles.row} onPress={triggerMobileError}>
-            <Text style={[styles.rowText, { color: colors.warning }]}>🧪 Test Sentry (Mobile)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={triggerBackendError}>
-            <Text style={[styles.rowText, { color: colors.warning }]}>🧪 Test Sentry (Backend)</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Log Out</Text>
