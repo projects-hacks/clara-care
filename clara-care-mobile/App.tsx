@@ -5,12 +5,15 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Initialize Sentry for crash reporting
-Sentry.init({
-  dsn: 'https://5ea34f7a70e498b32110582b5143df85@o4511385064767488.ingest.us.sentry.io/4511385081872384',
-  tracesSampleRate: 0.3,
-  profilesSampleRate: 0.1,
-  debug: __DEV__, // Show Sentry logs in dev mode
-});
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    tracesSampleRate: 0.3,
+    profilesSampleRate: 0.1,
+    debug: __DEV__, // Show Sentry logs in dev mode
+  });
+}
 
 function App() {
   return (
