@@ -17,18 +17,6 @@ from fastapi.responses import JSONResponse, Response
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# Initialize Sentry error tracking (must happen before app imports)
-import sentry_sdk
-sentry_dsn = os.getenv("SENTRY_DSN")
-if sentry_dsn:
-    sentry_sdk.init(
-        dsn=sentry_dsn,
-        send_default_pii=True,
-        traces_sample_rate=0.3,  # Sample 30% of transactions for performance
-        profile_session_sample_rate=0.1,
-        profile_lifecycle="trace",
-    )
-
 from .voice import twilio_bridge, session_manager, outbound_manager
 
 # Cognitive analysis and storage components
