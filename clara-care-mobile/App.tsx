@@ -1,19 +1,7 @@
-import * as Sentry from '@sentry/react-native';
 import { Provider } from 'react-redux';
 import { store } from './src/store';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-
-// Initialize Sentry for crash reporting
-const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
-if (sentryDsn) {
-  Sentry.init({
-    dsn: sentryDsn,
-    tracesSampleRate: 0.3,
-    profilesSampleRate: 0.1,
-    debug: __DEV__, // Show Sentry logs in dev mode
-  });
-}
 
 function App() {
   return (
@@ -25,4 +13,4 @@ function App() {
   );
 }
 
-export default Sentry.wrap(App);
+export default App;
