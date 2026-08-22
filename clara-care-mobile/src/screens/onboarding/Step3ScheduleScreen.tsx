@@ -122,6 +122,7 @@ export default function Step3ScheduleScreen({ route }: Props) {
                     display="spinner"
                     onChange={onChange}
                     style={{ height: 200 }}
+                    textColor={colors.text}
                   />
                 </View>
               </View>
